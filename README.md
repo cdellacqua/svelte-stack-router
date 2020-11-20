@@ -50,16 +50,17 @@ If the user goes to P2, the following happens:
 - the new stack is P1 -> P3 -> P2
 - the browser history gets modified to reflect this new order
 
-If the user presses the back button then P2, which is the current top of the stack, is destroyed.
+If the user presses the back button, then P2, which is the current top of the stack, gets destroyed.
 The page order is not modified: P1 -> P3
 
 ## Enhanced lifecycle functions
 
-In addition to the onMount and onDestroy lifecycle functions provided by Svelte, this library offers onPause and onResume.
-onPause is called **before** a component is lowered
-onResume is called **after** a component has been raised
+In addition to the `onMount` and `onDestroy` lifecycle functions provided by Svelte, this library offers onPause and onResume.
+- `onPause` is called **before** a component is lowered
+- `onResume` is called **after** a component has been raised
 
-onResume also supports a return value that can be passed using the "pop" function
+`onResume` also supports a return value that can be passed using the "pop" function.
+Both these lifecycle functions can be called by the Page component and by its children.
 
 ## Navigation functions
 
