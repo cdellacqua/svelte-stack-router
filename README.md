@@ -15,6 +15,7 @@ You can clone this repo and run `npm run dev` to see it working
 
 *routes: they are defined as an object like the following:
 
+```
 {
 	"/": Home,
 	"/my-page": PageComponent,
@@ -22,6 +23,7 @@ You can clone this repo and run `npm run dev` to see it working
 	"/my-other-page2/:optionalParam?": OtherPageThatAcceptsAnOptionalParameter,
 	"*": "MatchAll"
 }
+```
 
 ## How does it work
 
@@ -40,15 +42,15 @@ In other words:
 Suppose you have 3 pages, lets call them P1, P2, P3.
 The user visits your pages in the following order P1 -> P2 -> P3.
 
-Each time the user goes to a new page, the previous component gets "paused". Its HTML is not removed from the page, its just not displayed.
+Each time the user goes to a new page, the previous component gets "paused". Its HTML is not removed from the page, it just isn't displayed.
 
 If the user goes to P2, the following happens:
 - the StackRouter sees that P2 had previously been created, so its HTML is still in the DOM
-- P2 is raised to the top and displayed, while P3 is lowered. P2 is Resumed, while P3 is Paused
+- P2 is raised to the top and displayed, while P3 is lowered, in other words, P2 is Resumed, while P3 is Paused
 - the new stack is P1 -> P3 -> P2
 - the browser history gets modified to reflect this new order
 
-If the user presses the back button, P2, which is the current top of the stack, is destroyed.
+If the user presses the back button then P2, which is the current top of the stack, is destroyed.
 The page order is not modified: P1 -> P3
 
 ## Enhanced lifecycle functions
