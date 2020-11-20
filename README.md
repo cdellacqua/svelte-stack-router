@@ -19,6 +19,7 @@ You can clone this repo and run `npm run dev` to see it working
 	"/": Home,
 	"/my-page": PageComponent,
 	"/my-other-page/:someString": OtherPageThatAcceptsAParameter,
+	"/my-other-page2/:optionalParam?": OtherPageThatAcceptsAnOptionalParameter,
 	"*": "MatchAll"
 }
 
@@ -57,3 +58,12 @@ onPause is called **before** a component is lowered
 onResume is called **after** a component has been raised
 
 onResume also supports a return value that can be passed using the "pop" function
+
+## Navigation functions
+
+The following functions that enables programmatic navigation are provided:
+- `push('/some-route')`
+- `pop()` or `pop({ some: 'return value' })`
+- `replace('/a-route')`
+
+Those functions are inspired by the ones offered by [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router)
