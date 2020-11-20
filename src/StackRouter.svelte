@@ -1,7 +1,12 @@
 <script>
 	import { onDestroy, onMount } from "svelte";
 
-	import { stack, handleStackRouterComponentMount, handleStackRouterComponentDestroy, stackSize } from "./stack-router";
+	import {
+		stack,
+		handleStackRouterComponentMount,
+		handleStackRouterComponentDestroy,
+		stackSize,
+	} from "./stack-router";
 
 	$: size = stackSize($stack);
 
@@ -18,7 +23,7 @@
 	}
 </style>
 
-{#each $stack as { component, zIndex, params} (component)}
+{#each $stack as { component, zIndex, params } (component)}
 	<div
 		class:top={zIndex !== -1 && zIndex === size - 1}
 		class:back={zIndex !== -1 && zIndex !== size - 1}

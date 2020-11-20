@@ -1,9 +1,9 @@
 <script>
-	import { init } from './stack-router';
-	import StackRouter from './StackRouter.svelte';
-	import routes from './_routes';
+	import { init as initRouter } from "./stack-router";
+	import StackRouter from "./StackRouter.svelte";
+	import routes from "./_routes";
 
-	init(routes);
+	initRouter(routes);
 </script>
 
 <style>
@@ -11,6 +11,5 @@
 		font-family: sans-serif;
 	}
 </style>
-
 
 <StackRouter />

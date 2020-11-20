@@ -1,7 +1,7 @@
 <script>
-	import { onDestroy, onMount } from "svelte";
+	import { onMount, onDestroy } from "svelte";
+	import { onPause, onResume, pop } from "../stack-router";
 
-	import { onResume, onPause, pop } from "../stack-router";
 	let status = [];
 	onMount(() => {
 		status = [...status, "mounted"];
