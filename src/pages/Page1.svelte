@@ -1,20 +1,21 @@
 <script>
 	import { onMount, onDestroy } from "svelte";
-	import { onPause, onResume } from "../stack-router";
+	import { onPause, onResume, setResumable } from "../stack-router";
 
 	let status = [];
 	onMount(() => {
 		status = [...status, "mounted"];
 	});
 	onPause(() => {
-		status = [...status, "paused"];
+		status = [...status, "paused"]; // will not be executed
 	});
 	onResume((retVal) => {
-		status = [...status, "resumed" + (retVal ? `, received: "${retVal}"` : "")];
+		status = [...status, "resumed" + (retVal ? `, received: "${retVal}"` : "")]; // will not be executed
 	});
 	onDestroy(() => {
-		status = [...status, "destroyed"];
+		console.log('destroyed');
 	});
+	setResumable(false);
 </script>
 
 <h1>Example Page 1</h1>

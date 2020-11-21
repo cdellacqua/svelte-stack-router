@@ -1,14 +1,12 @@
 <script>
 	import { onDestroy, onMount } from "svelte";
+import Placeholder from "./Placeholder.svelte";
 
 	import {
 		stack,
 		handleStackRouterComponentMount,
 		handleStackRouterComponentDestroy,
-		stackSize,
 	} from "./stack-router";
-
-	$: size = stackSize($stack);
 
 	onMount(handleStackRouterComponentMount);
 	onDestroy(handleStackRouterComponentDestroy);
@@ -23,11 +21,11 @@
 	}
 </style>
 
-{#each $stack as { component, zIndex, params } (component)}
+{#each $stack as { component, zIndex, params, routeMatch } (component, routeMatch)}
 	<div
-		class:top={zIndex !== -1 && zIndex === size - 1}
-		class:back={zIndex !== -1 && zIndex !== size - 1}
-		class:placeholder={zIndex === -1}>
+		class:top={zIndex === $stack.length - 1}
+		class:back={zIndex !== $stack.length - 1}
+		class:placeholder={component === Placeholder}>
 		<svelte:component this={component} {params} />
 	</div>
 {/each}

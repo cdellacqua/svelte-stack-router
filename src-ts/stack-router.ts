@@ -3,6 +3,7 @@ import { SvelteComponent, tick } from 'svelte';
 import {
 	readable, derived, writable, get,
 } from 'svelte/store';
+import SvelteComponentDev from './Placeholder.svelte';
 import Placeholder from './Placeholder.svelte';
 
 function noop() { }
@@ -39,13 +40,16 @@ const config = {
 
 export interface StackEntry {
 	component: SvelteComponent,
-	location: string,
+	pathname: string,
 	params: object | undefined,
 	routeMatch: string,
 	onResume?: ((returnValue: any) => any)[],
 	onPause?: (() => any)[],
 	zIndex: number,
+	resumable: boolean,
 }
+
+type TopStackEntry = Omit<StackEntry, 'zIndex'>;
 
 export const stack = writable<StackEntry[]>([]);
 
@@ -110,9 +114,9 @@ async function waitForHistoryState(callback: () => void): Promise<void> {
 	}
 }
 
-function buildParams(location: string, routeKey: string): Record<string, string | null> | undefined {
+function buildParams(pathname: string, routeKey: string): Record<string, string | null> | undefined {
 	const { pattern, keys } = regexparam(routeKey);
-	const matches = pattern.exec(getPathname(location)) || [];
+	const matches = pattern.exec(pathname) || [];
 	const params = keys.reduce((params, _, index) => {
 		params[keys[index]] = matches[index + 1] === undefined ? null : decodeURIComponent(matches[index + 1]);
 		return params;
@@ -120,24 +124,7 @@ function buildParams(location: string, routeKey: string): Record<string, string 
 	return Object.keys(params).length === 0 ? undefined : params;
 }
 
-async function setup(location: string): Promise<void> {
-	lastHistoryTimestamp = (window.history.state ? window.history.state.timestamp : new Date().getTime()) - 1;
-	config.inhibitLocationStoreUpdate = true;
-	await waitForHistoryState(() => {
-		window.history.replaceState(
-			{
-				timestamp: lastHistoryTimestamp + 1,
-				scrollX: 0,
-				scrollY: 0,
-			},
-			'',
-			(config.useHash ? '#' : '') + location,
-		);
-	});
-	config.inhibitLocationStoreUpdate = false;
-}
-
-function buildStackEntry(stackEntries: StackEntry[], location: string, pathname: string): StackEntry | null {
+function getNewTop(stackEntries: StackEntry[], pathname: string): StackEntry | TopStackEntry | null {
 	const routeKeys = Object.keys(config.routes);
 	const routeKey = routeKeys.find((routeKey) => {
 		const { pattern } = regexparam(routeKey);
@@ -147,36 +134,27 @@ function buildStackEntry(stackEntries: StackEntry[], location: string, pathname:
 		return null;
 	}
 	const resumableEntryIndex = stackEntries.findIndex(
-		(s) => s.component === config.routes[routeKey],
+		(s) => s.routeMatch === routeKey,
 	);
 	if (resumableEntryIndex !== -1) {
-		if (stackEntries[resumableEntryIndex].location !== location) {
-			stackEntries[resumableEntryIndex].params = buildParams(location, routeKey);
-			stackEntries[resumableEntryIndex].location = location;
+		stackEntries[resumableEntryIndex].component = config.routes[routeKey]; // for backward navigation in case of Placeholders
+		if (stackEntries[resumableEntryIndex].pathname !== pathname) {
+			stackEntries[resumableEntryIndex].params = buildParams(pathname, routeKey);
+			stackEntries[resumableEntryIndex].pathname = pathname;
 		}
 		return stackEntries[resumableEntryIndex];
 	}
 	return {
 		component: config.routes[routeKey],
-		params: buildParams(location, routeKey),
-		location,
+		params: buildParams(pathname, routeKey),
+		pathname,
 		routeMatch: routeKey,
-		zIndex: resumableEntryIndex === -1 ? stackSize(stackEntries) : stackEntries[resumableEntryIndex].zIndex,
-	};
-}
-
-function buildBlankStackEntry(): StackEntry {
-	return {
-		component: Placeholder as unknown as SvelteComponent,
-		params: undefined,
-		location: '',
-		routeMatch: '',
-		zIndex: -1,
+		resumable: true,
 	};
 }
 
 async function reorderHistory(location: string, resumableEntryZIndex: number, stackEntries: StackEntry[]): Promise<void> {
-	const size = stackSize(stackEntries);
+	const size = stackEntries.length;
 	const historyItems = new Array<{ state: HistoryState, location: string }>(size - resumableEntryZIndex - 1);
 	config.inhibitLocationStoreUpdate = true;
 	for (let i = 0; i < historyItems.length; i++) {
@@ -193,195 +171,116 @@ async function reorderHistory(location: string, resumableEntryZIndex: number, st
 		(config.useHash ? '#' : '') + historyItems[0].location,
 	));
 	for (let i = 1; i < historyItems.length; i++) {
-		await push(historyItems[i].location, historyItems[i].state);
+		await waitForHistoryState(() => window.history.pushState(
+			historyItems[i].state,
+			'',
+			(config.useHash ? '#' : '') + historyItems[i].location,
+		));
 	}
 	await push(location);
 	config.inhibitLocationStoreUpdate = false;
 }
 
-async function reorder(location: string, newStackTop: StackEntry, stackEntries: StackEntry[]): Promise<void> {
-	await reorderHistory(location, newStackTop.zIndex, stackEntries);
+async function reorder(location: string, newStackTop: StackEntry, oldTop: StackEntry, stackEntries: StackEntry[]): Promise<void> {
+	const previousStackEntryZIndex = newStackTop.zIndex;
 
-	stackRemove(stackEntries, stackEntries.indexOf(newStackTop));
-	newStackTop.zIndex = stackSize(stackEntries);
-	stack.set(stackPush(stackEntries, newStackTop));
-}
+	await reorderHistory(location, previousStackEntryZIndex, stackEntries);
 
-let scroll = null;
-
-function stackTop(stackEntries: StackEntry[]): StackEntry | null {
-	return stackEntries.reduce((top: StackEntry | null, curr) => (top === null || (curr.zIndex > top.zIndex) ? curr : top), null);
-}
-
-function stackTopData(stackEntries: StackEntry[]): { entry: StackEntry | null, index: number } {
-	return stackEntries.reduce((top: { entry: StackEntry | null, index: number }, curr, index) => (top.entry === null || (curr.zIndex > top.entry.zIndex) ? {
-		entry: curr,
-		index,
-	} : top), {
-		entry: null,
-		index: -1,
-	});
-}
-
-function stackRemove(stackEntries: StackEntry[], index: number): StackEntry[] {
 	stackEntries.forEach((entry) => {
-		if (entry.zIndex !== -1 && entry.zIndex > stackEntries[index].zIndex) {
+		if (entry.zIndex > previousStackEntryZIndex) {
 			entry.zIndex--;
 		}
 	});
-	stackEntries[index] = buildBlankStackEntry();
-	let cleanFromIndex = stackEntries.length;
-	for (; cleanFromIndex > 0; cleanFromIndex--) {
-		if (stackEntries[cleanFromIndex - 1].zIndex !== -1) {
-			break;
-		}
-	}
-	stackEntries.splice(cleanFromIndex, stackEntries.length - cleanFromIndex);
+	newStackTop.zIndex = stackEntries.length - 1;
+
+	stack.set(stackEntries);
+}
+
+function stackTop(stackEntries: StackEntry[]): StackEntry | null {
+	return stackEntries
+		.reduce((top: StackEntry | null, curr) => (top === null || curr.zIndex > top.zIndex) ? curr : top, null);
+}
+
+function stackPush(stackEntries: StackEntry[], entry: TopStackEntry): StackEntry[] {
+	stackEntries.push({
+		...entry,
+		zIndex: stackEntries.length,
+	});
 	return stackEntries;
 }
 
-function stackPop(stackEntries: StackEntry[]): StackEntry[] {
-	stackRemove(stackEntries, stackTopData(stackEntries).index);
-
-	return stackEntries;
-}
-
-function stackPush(stackEntries: StackEntry[], entry: StackEntry): StackEntry[] {
-	const blankIndex = stackEntries.findIndex((e) => e.zIndex === -1);
-	if (blankIndex === -1) {
-		stackEntries.push(entry);
-	} else {
-		stackEntries[blankIndex] = entry;
-	}
-	return stackEntries;
-}
-
-export function stackSize(stackEntries: StackEntry[]): number {
-	return stackEntries.reduce((validIndeces, curr) => (curr.zIndex !== -1 ? validIndeces + 1 : validIndeces), 0);
-}
-
-/** NAVIGATION */
-async function forward(location: string, entry: StackEntry, stackEntries: StackEntry[]): Promise<void> {
-	const size = stackSize(stackEntries);
-	if (entry.zIndex === size) {
-		stack.set(stackPush(stackEntries, entry));
-	} else if (entry.zIndex !== size - 1) {
-		await reorder(location, entry, stackEntries);
-	}
-}
-
-async function backward(stackEntries: StackEntry[]): Promise<void> {
-	const newStack = stackPop(stackEntries);
-	stack.set(newStack);
-}
-
-async function stillward(location: string, stackEntry: StackEntry, stackEntries: StackEntry[]): Promise<void> {
-	const oldStackTop = stackTop(stackEntries);
-	if (!oldStackTop || oldStackTop.component !== stackEntry.component) {
-		const oldStackSize = stackSize(stackEntries);
-		if (oldStackSize > 0) {
-			await backward(stackEntries);
-		}
-		stackEntry.zIndex = Math.min(stackSize(stackEntries), stackEntry.zIndex);
-		await forward(location, stackEntry, stackEntries);
-	} else {
-		oldStackTop.location = stackEntry.location;
-		oldStackTop.params = stackEntry.params;
-		oldStackTop.routeMatch = stackEntry.routeMatch;
-		oldStackTop.onPause = stackEntry.onPause;
-		oldStackTop.onResume = stackEntry.onResume;
-		oldStackTop.zIndex = stackEntry.zIndex;
-		stack.set(stackEntries);
-	}
-}
-
-let firstRun = true;
 async function handleLocationChange(locationPreview: string): Promise<void> {
 	config.inhibitHref = true;
 	const currentStack: StackEntry[] = get(stack);
 
-	if (firstRun || !window.history.state) {
-		firstRun = false;
-		await setup(locationPreview);
-	}
-
-	const stackEntry = buildStackEntry(currentStack, locationPreview, getPathname(locationPreview));
-	if (!stackEntry) {
+	const newTop = getNewTop(currentStack, getPathname(locationPreview));
+	if (!newTop) {
 		console.error('no route found');
 	} else {
 		const oldTop = stackTop(currentStack);
-		const newTop = stackEntry;
-		const newTopIsResumed = currentStack.some((s) => s.component === newTop.component);
+		const newTopAlreadyInStack = currentStack.some((s) => s.routeMatch === newTop.routeMatch);
 
-		if (oldTop && oldTop.component !== newTop.component) {
-			if (oldTop.onPause && oldTop.onPause.length > 0) {
+		if (!oldTop) {
+			stack.set(stackPush(currentStack, newTop));
+		} else if (oldTop.routeMatch !== newTop.routeMatch) {
+			if (!oldTop.resumable) {
+				oldTop.onResume = undefined;
+				oldTop.onPause = undefined;
+				oldTop.component = Placeholder as unknown as SvelteComponent;
+			} else if (oldTop.onPause && oldTop.onPause.length > 0) {
 				for (const callback of oldTop.onPause) {
 					await callback();
 				}
 			}
-		}
 
-		if (window.history.state.timestamp > lastHistoryTimestamp) {
-			await forward(locationPreview, stackEntry, currentStack);
-			scroll = {
-				x: 0,
-				y: 0,
-			};
-		} else if (window.history.state.timestamp < lastHistoryTimestamp) {
-			if (currentStack.length === 0) {
-				await forward(locationPreview, stackEntry, currentStack);
-				scroll = {
-					x: 0,
-					y: 0,
-				};
-			} else if (currentStack.length === 1) {
-				await backward(currentStack);
-				stackEntry.zIndex = 0;
-				await forward(locationPreview, stackEntry, currentStack);
-				scroll = {
-					x: 0,
-					y: 0,
-				};
+			if (newTopAlreadyInStack) {
+				if (!window.history.state) { // FORWARD WITH NEW HISTORY ITEM
+					await reorder(locationPreview, newTop as StackEntry, oldTop, currentStack);
+				} else
+					if (window.history.state.timestamp < lastHistoryTimestamp) { // BACK
+						currentStack.forEach((entry) => {
+							entry.zIndex++;
+						});
+						oldTop.zIndex = 0;
+						stack.set(currentStack);
+					} else { // FORWARD WITH ARROW-RIGHT NAVIGATION
+						currentStack.forEach((entry) => {
+							entry.zIndex--;
+						});
+						(newTop as StackEntry).zIndex = currentStack.length - 1;
+						stack.set(currentStack);
+					}
 			} else {
-				await backward(currentStack);
-				scroll = {
-					x: window.history.state.scrollX,
-					y: window.history.state.scrollY,
-				};
+				stack.set(stackPush(currentStack, newTop));
 			}
 		} else {
-			await stillward(locationPreview, stackEntry, currentStack);
-			scroll = {
-				x: 0,
-				y: 0,
-			};
+			stack.set(currentStack);
 		}
-
-		lastHistoryTimestamp = window.history.state.timestamp;
 
 		await tick();
 
-		const { returnValue } = window.history.state;
-		if (!oldTop || oldTop.component !== newTop.component) {
-			if (newTopIsResumed) {
-				if (newTop && newTop.onResume && newTop.onResume.length > 0) {
-					for (const callback of newTop.onResume) {
-						await callback(returnValue);
-					}
+		if (newTopAlreadyInStack && newTop.resumable) {
+			if (newTop && newTop.onResume && newTop.onResume.length > 0) {
+				const { returnValue } = window.history.state || {};
+				for (const callback of newTop.onResume) {
+					await callback(returnValue);
 				}
 			}
 		}
-		window.history.replaceState({
+
+		if (config.restoreScroll) {
+			await animationFrame();
+
+			window.scrollTo((window.history.state && window.history.state.scrollX) || 0, (window.history.state && window.history.state.scrollY) || 0);
+		}
+
+		lastHistoryTimestamp = window.history.state ? window.history.state.timestamp : new Date().getTime();
+
+		await waitForHistoryState(() => window.history.replaceState({
 			timestamp: window.history.state ? window.history.state.timestamp : new Date().getTime(),
 			scrollX: window.scrollX,
 			scrollY: window.scrollY,
-		}, '', (config.useHash ? '#' : '') + locationPreview);
-
-		if (config.restoreScroll && scroll) {
-			await animationFrame();
-			window.scrollTo(scroll.x, scroll.y);
-			scroll = null;
-		}
+		}, '', (config.useHash ? '#' : '') + locationPreview));
 	}
 	location.set(locationPreview);
 	config.inhibitHref = false;
@@ -441,7 +340,7 @@ export async function replace(location: string, state?: HistoryState): Promise<v
 	dispatchCustomEvent(window as any, 'popstate');
 }
 
-export async function push(location: string, state?: HistoryState): Promise<void> {
+export async function push(location: string): Promise<void> {
 	if (config.restoreScroll) {
 		await waitForHistoryState(() => {
 			window.history.replaceState({
@@ -454,11 +353,7 @@ export async function push(location: string, state?: HistoryState): Promise<void
 
 	await waitForHistoryState(() => {
 		window.history.pushState(
-			state || {
-				timestamp: new Date().getTime(),
-				scrollX: 0,
-				scrollY: 0,
-			},
+			undefined,
 			'',
 			(config.useHash ? '#' : '') + location,
 		);
@@ -473,7 +368,7 @@ export async function pop(returnValue?: any): Promise<void> {
 	await waitForHistoryState(() => {
 		window.history.replaceState(
 			{
-				...window.history.state,
+				...window.history.state || {},
 				returnValue,
 			},
 			'',
@@ -541,4 +436,13 @@ export function onPause(callback: () => any): void {
 		stackEntry.onPause = [];
 	}
 	stackEntry.onPause.push(callback);
+}
+
+export function setResumable(resumable: boolean): void {
+	const stackEntries: StackEntry[] = get(stack);
+	const stackEntry = stackTop(stackEntries);
+	if (!stackEntry) {
+		return;
+	}
+	stackEntry.resumable = resumable;
 }

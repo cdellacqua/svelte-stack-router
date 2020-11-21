@@ -13,7 +13,7 @@
 		status = [...status, "resumed" + (retVal ? `, received: "${retVal}"` : "")];
 	});
 	onDestroy(() => {
-		status = [...status, "destroyed"];
+		console.log('destroyed'); // will not be executed
 	});
 </script>
 

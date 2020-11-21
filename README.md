@@ -2,7 +2,7 @@
 
 Svelte Router based on a Stack that will make your WebApp feel more native
 
-## Working demo:
+## Working demo
 * [App.svelte](https://github.com/cdellacqua/svelte-stack-router/blob/master/src/App.svelte)
 
 You can clone this repo and run `npm run dev` to see it working
@@ -25,7 +25,7 @@ You can clone this repo and run `npm run dev` to see it working
 }
 ```
 
-## How does it work
+## How it works
 
 This library takes advantage of the ability of Svelte of mutating the DOM without re-rendering unchanged HTML.
 
@@ -33,7 +33,7 @@ When you navigate to a new page, the component associated with that URL gets ins
 
 Things get interesting when you go back in your history or go to a page that had already been visited.
 
-**Previously instantiated pages don't get destroyed on forward navigation, only on backward navigation.**
+**Previously instantiated pages don't get destroyed, they just get paused and resumed to reduce re-renders and preserve their state**
 
 What happens is that the browser history gets sorted to bring the previously visited page on top of the others.
 
@@ -56,11 +56,14 @@ The page order is not modified: P1 -> P3
 ## Enhanced lifecycle functions
 
 In addition to the `onMount` and `onDestroy` lifecycle functions provided by Svelte, this library offers onPause and onResume.
-- `onPause` is called **before** a component is lowered
-- `onResume` is called **after** a component has been raised
+- `onPause` handlers are called **before** a component is lowered
+- `onResume` handlers are called **after** a component has been raised
 
 `onResume` also supports a return value that can be passed using the "pop" function.
 Both these lifecycle functions can be called by the Page component and by its children.
+
+If 
+`onPause` and `onResume`
 
 ## Navigation functions
 
