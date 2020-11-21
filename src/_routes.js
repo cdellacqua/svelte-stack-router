@@ -6,4 +6,5 @@ export default {
 	'/': Page1,
 	'/2': Page2,
 	'/3': Page3,
+	'/4': Page1,
 };
