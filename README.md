@@ -84,7 +84,10 @@ The following functions that enables programmatic navigation are provided:
 - `pop()` or `pop({ some: 'return value' })` (see [Returning values](#returning-values))
 - `replace('/a-route')`
 
-To creat
+To create links this library provides a custom `use:link` action that you can add to your `<a>` elements. This action serves two purposes:
+- if you are using the router in "hash mode" (e.g. in a client-side rendering context), it lets you write paths without having to manually add the `#` prefix to all the `href`. For example `<a href="/example-1" use:link>Example</a>` is automatically
+converted to `<a href="#/example-1">Example</a>`. This is particularly helpful if you later decide to switch to "path mode" (see next point)
+- if you are using the router in "path mode" (e.g. in a server-side rendering context), it prevents the default browser navigation behavior and, on user click, pushes the new location client-side
 
 Those functions are inspired by the ones offered by [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router).
 
