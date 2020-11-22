@@ -49,6 +49,7 @@ export interface StackEntry {
 	routeMatch: string,
 	onResume?: ((returnValue: any) => any)[],
 	onPause?: (() => any)[],
+	onBeforeUnload?: (() => any)[],
 	zIndex: number,
 	resumable: boolean,
 }
@@ -202,16 +203,30 @@ async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
 			stackPush(currentStack, newTop);
 		} else if (oldTop.routeMatch !== newTop.routeMatch) {
 			if (!oldTop.resumable) {
+				if (oldTop.onBeforeUnload && oldTop.onBeforeUnload.length > 0) {
+					for (const callback of oldTop.onBeforeUnload) {
+						await callback();
+					}
+				}
+				oldTop.onBeforeUnload = undefined;
+
 				oldTop.scrollX = 0;
 				oldTop.scrollY = 0;
 				oldTop.onResume = undefined;
 				oldTop.onPause = undefined;
 				oldTop.component = Placeholder as unknown as SvelteComponent;
-			} else if (oldTop.onPause && oldTop.onPause.length > 0) {
+			} else {
+				if (oldTop.onBeforeUnload && oldTop.onBeforeUnload.length > 0) {
+					for (const callback of oldTop.onBeforeUnload) {
+						await callback();
+					}
+				}
 				oldTop.scrollX = window.scrollX;
 				oldTop.scrollY = window.scrollY;
-				for (const callback of oldTop.onPause) {
-					await callback();
+				if (oldTop.onPause && oldTop.onPause.length > 0) {
+					for (const callback of oldTop.onPause) {
+						await callback();
+					}
 				}
 			}
 			if (newTopAlreadyInStack) {
@@ -521,6 +536,18 @@ export function onPause(callback: () => any): void {
 		stackEntry.onPause = [];
 	}
 	stackEntry.onPause.push(callback);
+}
+
+export function onBeforeUnload(callback: () => any): void {
+	const stackEntries: StackEntry[] = get(stack);
+	const stackEntry = stackTop(stackEntries);
+	if (!stackEntry) {
+		return;
+	}
+	if (!stackEntry.onBeforeUnload) {
+		stackEntry.onBeforeUnload = [];
+	}
+	stackEntry.onBeforeUnload.push(callback);
 }
 
 export function setResumable(resumable: boolean): void {

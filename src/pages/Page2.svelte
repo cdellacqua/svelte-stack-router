@@ -1,6 +1,6 @@
 <script>
 	import { onMount, onDestroy } from "svelte";
-	import { onPause, onResume, pathname } from "../stack-router";
+	import { onPause, onResume, pathname, onBeforeUnload } from "../stack-router";
 
 	let status = [];
 	onMount(() => {
@@ -14,6 +14,10 @@
 	});
 	onDestroy(() => {
 		console.log('destroyed'); // will not be executed
+	});
+	onBeforeUnload(() => {
+		status = [...status, "before unload, i'll just wait 1s"];
+		return new Promise((res) => setTimeout(res, 1000));
 	});
 </script>
 
