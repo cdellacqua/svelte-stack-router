@@ -23,6 +23,7 @@ import Placeholder from "./Placeholder.svelte";
 
 {#each $stack as { component, zIndex, params, routeMatch } (component, routeMatch)}
 	<div
+		data-z-index={zIndex}
 		class:top={zIndex === $stack.length - 1}
 		class:back={zIndex !== $stack.length - 1}
 		class:placeholder={component === Placeholder}>

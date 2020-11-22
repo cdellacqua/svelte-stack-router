@@ -3,7 +3,6 @@ import { SvelteComponent, tick } from 'svelte';
 import {
 	readable, derived, writable, get,
 } from 'svelte/store';
-import SvelteComponentDev from './Placeholder.svelte';
 import Placeholder from './Placeholder.svelte';
 
 function noop() { }
@@ -24,10 +23,13 @@ function dispatchCustomEvent(element: HTMLElement, eventName: string) {
 }
 
 export interface HistoryState {
-	scrollX: number,
-	scrollY: number,
 	timestamp: number,
 	returnValue?: any,
+}
+
+export interface HistoryItem {
+	location: string,
+	state: HistoryState,
 }
 
 const config = {
@@ -39,6 +41,8 @@ const config = {
 };
 
 export interface StackEntry {
+	scrollX: number,
+	scrollY: number,
 	component: SvelteComponent,
 	pathname: string,
 	params: object | undefined,
@@ -49,7 +53,7 @@ export interface StackEntry {
 	resumable: boolean,
 }
 
-type TopStackEntry = Omit<StackEntry, 'zIndex'>;
+type TopStackEntry = Omit<StackEntry, 'zIndex' | 'scrollX' | 'scrollY'>;
 
 export const stack = writable<StackEntry[]>([]);
 
@@ -153,49 +157,6 @@ function getNewTop(stackEntries: StackEntry[], pathname: string): StackEntry | T
 	};
 }
 
-async function reorderHistory(location: string, resumableEntryZIndex: number, stackEntries: StackEntry[]): Promise<void> {
-	const size = stackEntries.length;
-	const historyItems = new Array<{ state: HistoryState, location: string }>(size - resumableEntryZIndex - 1);
-	config.inhibitLocationStoreUpdate = true;
-	for (let i = 0; i < historyItems.length; i++) {
-		await waitForHistoryState(() => window.history.back());
-		historyItems[historyItems.length - 1 - i] = {
-			state: window.history.state,
-			location: getLocation(),
-		};
-	}
-	await waitForHistoryState(() => window.history.back());
-	await waitForHistoryState(() => window.history.replaceState(
-		historyItems[0].state,
-		'',
-		(config.useHash ? '#' : '') + historyItems[0].location,
-	));
-	for (let i = 1; i < historyItems.length; i++) {
-		await waitForHistoryState(() => window.history.pushState(
-			historyItems[i].state,
-			'',
-			(config.useHash ? '#' : '') + historyItems[i].location,
-		));
-	}
-	await push(location);
-	config.inhibitLocationStoreUpdate = false;
-}
-
-async function reorder(location: string, newStackTop: StackEntry, oldTop: StackEntry, stackEntries: StackEntry[]): Promise<void> {
-	const previousStackEntryZIndex = newStackTop.zIndex;
-
-	await reorderHistory(location, previousStackEntryZIndex, stackEntries);
-
-	stackEntries.forEach((entry) => {
-		if (entry.zIndex > previousStackEntryZIndex) {
-			entry.zIndex--;
-		}
-	});
-	newStackTop.zIndex = stackEntries.length - 1;
-
-	stack.set(stackEntries);
-}
-
 function stackTop(stackEntries: StackEntry[]): StackEntry | null {
 	return stackEntries
 		.reduce((top: StackEntry | null, curr) => (top === null || curr.zIndex > top.zIndex) ? curr : top, null);
@@ -205,15 +166,31 @@ function stackPush(stackEntries: StackEntry[], entry: TopStackEntry): StackEntry
 	stackEntries.push({
 		...entry,
 		zIndex: stackEntries.length,
+		scrollX: 0,
+		scrollY: 0,
 	});
 	return stackEntries;
 }
 
-async function handleLocationChange(locationPreview: string): Promise<void> {
+let historyItems: HistoryItem[] = [];
+async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
 	config.inhibitHref = true;
 	const currentStack: StackEntry[] = get(stack);
 
-	const newTop = getNewTop(currentStack, getPathname(locationPreview));
+	// console.debug('history before');
+	// console.debug(historyItems);
+	// console.debug('stack before');
+	// console.debug(currentStack);
+
+	const newHistoryItem = !historyItem.state;
+	if (newHistoryItem) {
+		historyItem.state = {
+			timestamp: new Date().getTime(),
+		};
+		await waitForHistoryState(() => window.history.replaceState(historyItem.state, '', (config.useHash ? '#' : '') + historyItem.location));
+	}
+
+	const newTop = getNewTop(currentStack, getPathname(historyItem.location));
 	if (!newTop) {
 		console.error('no route found');
 	} else {
@@ -221,47 +198,159 @@ async function handleLocationChange(locationPreview: string): Promise<void> {
 		const newTopAlreadyInStack = currentStack.some((s) => s.routeMatch === newTop.routeMatch);
 
 		if (!oldTop) {
-			stack.set(stackPush(currentStack, newTop));
+			historyItems = [historyItem];
+			stackPush(currentStack, newTop);
 		} else if (oldTop.routeMatch !== newTop.routeMatch) {
 			if (!oldTop.resumable) {
+				oldTop.scrollX = 0;
+				oldTop.scrollY = 0;
 				oldTop.onResume = undefined;
 				oldTop.onPause = undefined;
 				oldTop.component = Placeholder as unknown as SvelteComponent;
 			} else if (oldTop.onPause && oldTop.onPause.length > 0) {
+				oldTop.scrollX = window.scrollX;
+				oldTop.scrollY = window.scrollY;
 				for (const callback of oldTop.onPause) {
 					await callback();
 				}
 			}
-
 			if (newTopAlreadyInStack) {
-				if (!window.history.state) { // FORWARD WITH NEW HISTORY ITEM
-					await reorder(locationPreview, newTop as StackEntry, oldTop, currentStack);
-				} else
-					if (window.history.state.timestamp < lastHistoryTimestamp) { // BACK
-						currentStack.forEach((entry) => {
-							entry.zIndex++;
-						});
-						oldTop.zIndex = 0;
-						stack.set(currentStack);
-					} else { // FORWARD WITH ARROW-RIGHT NAVIGATION
-						currentStack.forEach((entry) => {
-							entry.zIndex--;
-						});
-						(newTop as StackEntry).zIndex = currentStack.length - 1;
-						stack.set(currentStack);
+				config.inhibitLocationStoreUpdate = true;
+
+				const newTopStackEntry = newTop as StackEntry;
+				if (newHistoryItem || historyItem.state.timestamp > lastHistoryTimestamp) { // FORWARD WITH NEW HISTORY ITEM OR WITH ARROW-RIGHT BROWSER KEY
+					if (!newHistoryItem) {
+						// console.debug('forward');
+						historyItems.push(historyItem);
+					} else { // FORWARD WITH NEW HISTORY ITEM
+						// console.debug('push - existing');
+
+						if (currentStack.length - 1 - newTopStackEntry.zIndex <= historyItems.length - 1) {
+							// console.debug('BACK FROM ' + window.location.href); 
+							await waitForHistoryState(() => window.history.back());
+							// console.debug('TO ' + window.location.href);
+
+							const backCount = currentStack.length - 1 - newTopStackEntry.zIndex;
+							for (let i = 0; i < backCount; i++) {
+								// console.debug('BACK FROM ' + window.location.href); 
+								await waitForHistoryState(() => window.history.back());
+								// console.debug('TO ' + window.location.href);
+							}
+							// console.debug('REPLACE FROM ' + window.location.href);
+							await waitForHistoryState(() => window.history.replaceState(
+								historyItems[historyItems.length - backCount].state,
+								'',
+								(config.useHash ? '#' : '') + historyItems[historyItems.length - backCount].location,
+							));
+							// console.debug('TO ' + window.location.href);
+							for (let i = 0; i < backCount - 1; i++) {
+								// console.debug('PUSH FROM ' + window.location.href);
+								await waitForHistoryState(() => window.history.pushState(
+									historyItems[historyItems.length - backCount + 1 + i].state,
+									'',
+									(config.useHash ? '#' : '') + historyItems[historyItems.length - backCount + 1 + i].location,
+								));
+								// console.debug('TO ' + window.location.href);
+							}
+							// console.debug('PUSH FROM ' + window.location.href);
+							await waitForHistoryState(() => window.history.pushState(
+								historyItem.state,
+								'',
+								(config.useHash ? '#' : '') + historyItem.location,
+							));
+							// console.debug('TO ' + window.location.href);
+
+							historyItems.splice(historyItems.length - backCount - 1, 1);
+							historyItems.push(historyItem);
+						} else {
+							historyItems.push(historyItem);
+						}
 					}
+					currentStack.forEach((entry) => {
+						if (entry.zIndex > newTopStackEntry.zIndex) {
+							entry.zIndex--;
+						}
+					});
+					newTopStackEntry.zIndex = currentStack.length - 1;
+				} else if (historyItem.state.timestamp < lastHistoryTimestamp) { // BACK
+					// console.debug('back');
+					currentStack.forEach((entry) => {
+						entry.zIndex++;
+					});
+					oldTop.zIndex = 0;
+
+					historyItems.splice(historyItems.length - 1, 1);
+				} else if (historyItem.state.timestamp === lastHistoryTimestamp) { // REPLACE
+					// console.debug('replace - existing');
+					if (currentStack.length - 1 - newTopStackEntry.zIndex <= historyItems.length - 1) {
+						const backCount = currentStack.length - 1 - newTopStackEntry.zIndex;
+						for (let i = 0; i < backCount; i++) {
+							await waitForHistoryState(() => window.history.back());
+						}
+						await waitForHistoryState(() => window.history.replaceState(
+							historyItems[historyItems.length - backCount].state,
+							'',
+							(config.useHash ? '#' : '') + historyItems[historyItems.length - backCount].location,
+						));
+						for (let i = 0; i < backCount - 1; i++) {
+							await waitForHistoryState(() => window.history.pushState(
+								historyItems[historyItems.length - backCount + 1 + i].state,
+								'',
+								(config.useHash ? '#' : '') + historyItems[historyItems.length - backCount + 1 + i].location,
+							));
+						}
+						await waitForHistoryState(() => window.history.replaceState(
+							historyItem.state,
+							'',
+							(config.useHash ? '#' : '') + historyItem.location,
+						));
+
+						historyItems.splice(historyItems.length - backCount - 1, 1);
+						historyItems[historyItems.length - 1] = historyItem;
+					} else {
+						historyItems[historyItems.length - 1] = historyItem;
+					}
+
+					currentStack.forEach((entry) => {
+						entry.zIndex++;
+					});
+					oldTop.zIndex = 0;
+
+					currentStack.forEach((entry) => {
+						if (entry.zIndex > newTopStackEntry.zIndex) {
+							entry.zIndex--;
+						}
+					});
+					newTopStackEntry.zIndex = currentStack.length - 1;
+				}
+
+				config.inhibitLocationStoreUpdate = false;
 			} else {
-				stack.set(stackPush(currentStack, newTop));
+				if (historyItem.state && historyItem.state.timestamp === lastHistoryTimestamp) {
+					// console.debug('replace - new');
+					currentStack.forEach((entry) => {
+						entry.zIndex++;
+					});
+					oldTop.zIndex = 0;
+
+					historyItems[historyItems.length - 1] = historyItem;
+				} else {
+					// console.debug('push - new');
+					historyItems.push(historyItem);
+				}
+				stackPush(currentStack, newTop);
 			}
-		} else {
-			stack.set(currentStack);
 		}
 
+		lastHistoryTimestamp = historyItem.state.timestamp;
+		
+		stack.set(currentStack);
+		
 		await tick();
 
 		if (newTopAlreadyInStack && newTop.resumable) {
+			const { returnValue } = historyItem.state || {};
 			if (newTop && newTop.onResume && newTop.onResume.length > 0) {
-				const { returnValue } = window.history.state || {};
 				for (const callback of newTop.onResume) {
 					await callback(returnValue);
 				}
@@ -271,31 +360,28 @@ async function handleLocationChange(locationPreview: string): Promise<void> {
 		if (config.restoreScroll) {
 			await animationFrame();
 
-			window.scrollTo((window.history.state && window.history.state.scrollX) || 0, (window.history.state && window.history.state.scrollY) || 0);
+			window.scrollTo(currentStack[currentStack.length - 1].scrollX, currentStack[currentStack.length - 1].scrollY);
 		}
-
-		lastHistoryTimestamp = window.history.state ? window.history.state.timestamp : new Date().getTime();
-
-		await waitForHistoryState(() => window.history.replaceState({
-			timestamp: window.history.state ? window.history.state.timestamp : new Date().getTime(),
-			scrollX: window.scrollX,
-			scrollY: window.scrollY,
-		}, '', (config.useHash ? '#' : '') + locationPreview));
 	}
-	location.set(locationPreview);
+	// console.debug('history after');
+	// console.debug(historyItems);
+	// console.debug('stack after');
+	// console.debug(currentStack);
+
+	location.set(historyItem.location);
 	config.inhibitHref = false;
 }
 
-const locationQueue: string[] = [];
+const historyItemsQueue: HistoryItem[] = [];
 let consumingQueue = false;
 async function consumeQueue(): Promise<void> {
 	if (consumingQueue) {
 		return;
 	}
 	consumingQueue = true;
-	while (locationQueue.length > 0) {
-		const locationPreview = locationQueue.shift()!;
-		await handleLocationChange(locationPreview);
+	while (historyItemsQueue.length > 0) {
+		const item = historyItemsQueue.shift()!;
+		await handleHistoryChange(item);
 	}
 	consumingQueue = false;
 }
@@ -311,7 +397,10 @@ export function handleStackRouterComponentMount(): void {
 	locationPreview
 		.subscribe(
 			($locationPreview) => {
-				locationQueue.push($locationPreview);
+				historyItemsQueue.push({
+					location: $locationPreview,
+					state: window.history.state,
+				});
 				consumeQueue();
 			},
 		);
@@ -329,8 +418,6 @@ export async function replace(location: string, state?: HistoryState): Promise<v
 		window.history.replaceState(
 			state || {
 				timestamp: lastHistoryTimestamp,
-				scrollX: 0,
-				scrollY: 0,
 			},
 			'',
 			(config.useHash ? '#' : '') + location,
@@ -345,8 +432,6 @@ export async function push(location: string): Promise<void> {
 		await waitForHistoryState(() => {
 			window.history.replaceState({
 				timestamp: window.history.state ? window.history.state.timestamp : new Date().getTime(),
-				scrollX: window.scrollX,
-				scrollY: window.scrollY,
 			}, '', (config.useHash ? '#' : '') + getLocation());
 		});
 	}
