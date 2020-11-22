@@ -50,6 +50,7 @@ export interface StackEntry {
 	onResume?: ((returnValue: any) => any)[],
 	onPause?: (() => any)[],
 	onBeforeUnload?: (() => any)[],
+	onAfterLoad?: (() => any)[],
 	zIndex: number,
 	resumable: boolean,
 }
@@ -209,6 +210,7 @@ async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
 					}
 				}
 				oldTop.onBeforeUnload = undefined;
+				oldTop.onAfterLoad = undefined;
 
 				oldTop.scrollX = 0;
 				oldTop.scrollY = 0;
@@ -363,12 +365,18 @@ async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
 		
 		await tick();
 
-		if (newTopAlreadyInStack && newTop.resumable) {
+		const newStackTopEntry = stackTop(currentStack)!;
+		if (newTopAlreadyInStack && newStackTopEntry.resumable) {
 			const { returnValue } = historyItem.state || {};
-			if (newTop && newTop.onResume && newTop.onResume.length > 0) {
-				for (const callback of newTop.onResume) {
+			if (newStackTopEntry.onResume && newStackTopEntry.onResume.length > 0) {
+				for (const callback of newStackTopEntry.onResume) {
 					await callback(returnValue);
 				}
+			}
+		}
+		if (newStackTopEntry.onAfterLoad && newStackTopEntry.onAfterLoad.length > 0) {
+			for (const callback of newStackTopEntry.onAfterLoad) {
+				await callback();
 			}
 		}
 
@@ -548,6 +556,18 @@ export function onBeforeUnload(callback: () => any): void {
 		stackEntry.onBeforeUnload = [];
 	}
 	stackEntry.onBeforeUnload.push(callback);
+}
+
+export function onAfterLoad(callback: () => any): void {
+	const stackEntries: StackEntry[] = get(stack);
+	const stackEntry = stackTop(stackEntries);
+	if (!stackEntry) {
+		return;
+	}
+	if (!stackEntry.onAfterLoad) {
+		stackEntry.onAfterLoad = [];
+	}
+	stackEntry.onAfterLoad.push(callback);
 }
 
 export function setResumable(resumable: boolean): void {

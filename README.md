@@ -58,8 +58,8 @@ The page order is not modified: P1 -> P3
 In addition to the `onMount` and `onDestroy` lifecycle functions provided by Svelte, this library offers `onPause` and `onResume`.
 - `onPause` handlers are called **before** a component is lowered
 - `onResume` handlers are called **after** a component has been raised
-- `onBeforeUnload` handlers are called **before** a component is **lowered or destroyed** and before any pause handlers,
-so it can be used for either resumable and non-resumable components
+- `onBeforeUnload` handlers are called **before** a component is **lowered or destroyed** and before any pause handlers in case of resumable components
+- `onAfterLoad` handlers are called **after** a component has been **raised or mounted** and after any resume handlers in case of resumable components
 
 All these new lifecycle functions accept synchronous and asynchronous callbacks. In case of asynchronous callbacks each one of them gets executed
 in a synchronous manner.
