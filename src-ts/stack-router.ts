@@ -110,9 +110,13 @@ let lastHistoryTimestamp: number;
 async function waitForHistoryState(callback: () => void): Promise<void> {
 	const historyState = window.history.state;
 	callback();
+
+	// This loop is needed to ensure that the browser updates the history.state object.
+	// Apparently, the update is not synchronous and the History API functions (pushState/replaceState/popState) don't
+	// provide any mechanism to wait until the update actually happens
 	let limit = 100;
 	while (historyState === window.history.state && limit) {
-		await sleep(1);
+		await sleep(2);
 		limit--;
 	}
 	if (historyState === window.history.state) {
@@ -495,8 +499,8 @@ export function link(node: HTMLAnchorElement, href?: string): { update: Function
 	async function pushState(e: MouseEvent) {
 		if (!e.ctrlKey) {
 			e.preventDefault();
-			// for an unknown reason, pushing the state block any on:click handler attached in a Svelte file
-			// this sleep let the event propagate and schedule the push call after the bubbling has finished
+			// for an unknown reason, pushing the state blocks any on:click handler attached in a Svelte file.
+			// This sleep let the event propagate and schedule the push call after the bubbling has finished
 			await sleep(1);
 			push(config.useHash ? node.getAttribute('href')!.substring(1) : node.getAttribute('href')!);
 		}

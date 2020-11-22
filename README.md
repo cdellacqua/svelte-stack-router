@@ -9,11 +9,12 @@ You can clone this repo and run `npm run dev` to see it working
 
 ## Quick setup
 
+- open/create the component that will wrap the ones you want be able to navigate
 - import the init function and the StackRouter component
-- call the init function passing the routes*
-- done
+- call the init function passing the routes [^] (and optionally the other configuration parameters [^])
+- add the `<StackRouter />` tag somewhere in the HTML section
 
-*routes: they are defined as an object like the following:
+[^]: routes are defined as key-value pairs, like in the following example
 
 ```
 {
@@ -24,6 +25,10 @@ You can clone this repo and run `npm run dev` to see it working
 	"*": "MatchAll"
 }
 ```
+
+[^] the initialization function is defined as follows (note that only the first argument is required)
+
+`init(routes: Record<string, SvelteComponent>, restoreScroll: boolean = true, useHash: boolean = true)`
 
 ## How it works
 
@@ -72,14 +77,16 @@ If you have a component which shouldn't be paused or resumed by the StackRouter,
 
 and pass `false`. Doing this will make you component disposable, so that it will be mounted and destroyed and never paused or resumed.
 
-## Navigation functions
+## Navigation functions and links
 
 The following functions that enables programmatic navigation are provided:
 - `push('/some-route')`
 - `pop()` or `pop({ some: 'return value' })` (see [Returning values](#returning-values))
 - `replace('/a-route')`
 
-Those functions are inspired by the ones offered by [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router)
+To creat
+
+Those functions are inspired by the ones offered by [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router).
 
 ## Returning values
 

@@ -1,6 +1,6 @@
 <script>
 	import { onMount, onDestroy } from "svelte";
-	import { onPause, onResume, pathname, pop } from "../stack-router";
+	import { onPause, onResume, pathname, link } from "../stack-router";
 
 	let status = [];
 	onMount(() => {
@@ -19,7 +19,7 @@
 
 <h1>Not found</h1>
 <h2>{$pathname}</h2>
-<a href="#/redirect">Redirect</a>
+<a use:link href="/redirect">Redirect</a>
 <br />
 <div>Events:</div>
 {@html status.join('<br />')}
