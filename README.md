@@ -11,7 +11,7 @@ You can clone this repo and run `npm run dev` to see it working
 
 - open/create the component that will wrap the ones you want be able to navigate
 - import the init function and the StackRouter component
-- call the init function passing the routes [^] (and optionally the other configuration parameters [^])
+- call the init function passing the routes [^] and optionally the other configuration parameters [^]
 - add the `<StackRouter />` tag somewhere in the HTML section
 
 [^]: routes are defined as key-value pairs, like in the following example
