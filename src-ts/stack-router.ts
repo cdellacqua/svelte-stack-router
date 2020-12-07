@@ -387,7 +387,7 @@ async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
 		if (config.restoreScroll) {
 			await animationFrame();
 
-			window.scrollTo(currentStack[currentStack.length - 1].scrollX, currentStack[currentStack.length - 1].scrollY);
+			window.scrollTo(newStackTopEntry.scrollX, newStackTopEntry.scrollY);
 		}
 	}
 	// console.debug('history after');
