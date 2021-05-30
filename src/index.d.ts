@@ -26,31 +26,31 @@ export class StackRouter extends SvelteComponent {
 		routes: Routes,
 		/** A function that handles the transition between two pages */
 		transitionFn: TransitionFunction,
-
-		/** Triggered on errors such as "no route found" */
-		$on(event: 'error', handler: (e: CustomEvent<{
-			message: string,
-			location: string,
-		}>) => any): () => void;
-
-		/** Triggered before unloading the old page and before loading the new page */
-		$on(event: 'navigation-start', handler: (e: CustomEvent<{
-			location: string,
-			navigationType: NavigationType,
-			pageToLoad: CacheEntry,
-			pageToUnload: CacheEntry|null,
-			pageToLoadAction: PageToLoadAction,
-			pageToUnloadAction: PageToUnloadAction,
-		}>) => any): () => void;
-
-		/** Triggered after unloading the old page and after loading the new page */
-		$on(event: 'navigation-end', handler: (e: CustomEvent<{
-			location: string,
-			navigationType: NavigationType,
-			pageToLoad: CacheEntry,
-			pageToUnload: CacheEntry|null,
-			pageToLoadAction: PageToLoadAction,
-			pageToUnloadAction: PageToUnloadAction,
-		}>) => any): () => void;
 	}
+
+	/** Triggered on errors such as "no route found" */
+	$on(event: 'error', handler: (e: CustomEvent<{
+		message: string,
+		location: string,
+	}>) => any): () => void;
+
+	/** Triggered before unloading the old page and before loading the new page */
+	$on(event: 'navigation-start', handler: (e: CustomEvent<{
+		location: string,
+		navigationType: NavigationType,
+		pageToLoad: CacheEntry,
+		pageToUnload: CacheEntry | null,
+		pageToLoadAction: PageToLoadAction,
+		pageToUnloadAction: PageToUnloadAction,
+	}>) => any): () => void;
+
+	/** Triggered after unloading the old page and after loading the new page */
+	$on(event: 'navigation-end', handler: (e: CustomEvent<{
+		location: string,
+		navigationType: NavigationType,
+		pageToLoad: CacheEntry,
+		pageToUnload: CacheEntry | null,
+		pageToLoadAction: PageToLoadAction,
+		pageToUnloadAction: PageToUnloadAction,
+	}>) => any): () => void;
 }
