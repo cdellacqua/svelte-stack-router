@@ -23,6 +23,8 @@ module.exports = {
 		'import/prefer-default-export': 'off',
 		'no-plusplus': 'off',
 		'@typescript-eslint/no-empty-function': 'off',
+		'max-classes-per-file': 'off',
+		'camelcase': 'off',
 		'no-tabs': [
 			'error',
 			{

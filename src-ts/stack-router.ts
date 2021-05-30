@@ -25,6 +25,7 @@ const config: Config = {
 	routes: {},
 	mountPoint: null,
 	transitionFn: noAnimation(),
+	dispatch: null,
 };
 
 const internalCache = writable<CacheEntry[]>([]);
@@ -189,6 +190,7 @@ export function handleStackRouterComponentDestroy(): void {
 	internalCache.set([]);
 	locationSubscription = noop;
 	config.mountPoint = null;
+	config.dispatch = null;
 }
 
 let editableEntryConfig: ComponentConfig | null = null;
@@ -251,180 +253,201 @@ async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
 		await waitForHistoryState(() => window.history.replaceState(historyItem.state, '', (config.useHash ? '#' : '') + historyItem.location));
 	}
 
-	const cacheEntryToLoad = await prepareCacheEntryToActivate(currentCache, getPathname(historyItem.location));
-	if (!cacheEntryToLoad) {
-		console.error('no route found');
-	} else {
-		const cacheEntryToUnload = activeCacheEntry;
-		const newTopIndexInCurrentStack = currentCache.findIndex((s) => s.routeMatch === cacheEntryToLoad.routeMatch);
-
-		let cacheEntryToLoadAction = LoadableEntryAction.NoOp;
-		let cacheEntryToUnloadAction = UnloadableEntryAction.NoOp;
-		let navigationType: NavigationType = NavigationType.GoForwardNewState;
-
-		if (!cacheEntryToUnload) {
-			cacheEntryToLoadAction = LoadableEntryAction.New;
-		} else {
-			if (cacheEntryToUnload.routeMatch !== cacheEntryToLoad.routeMatch) {
-				if (newTopIndexInCurrentStack !== -1) {
-					cacheEntryToLoadAction = LoadableEntryAction.Resume;
-				} else {
-					cacheEntryToLoadAction = LoadableEntryAction.New;
-				}
-				if (cacheEntryToUnload.entryConfig.resumable) {
-					cacheEntryToUnloadAction = UnloadableEntryAction.Pause;
-				} else {
-					cacheEntryToUnloadAction = UnloadableEntryAction.Destroy;
-				}
-			}
-
-			if (isNewHistoryItem) {
-				navigationType = NavigationType.GoForwardNewState;
-			} else if (historyItem.state.timestamp > lastHistoryTimestamp) {
-				navigationType = NavigationType.GoForwardResumeState;
-			} else if (historyItem.state.timestamp < lastHistoryTimestamp) {
-				navigationType = NavigationType.GoBackward;
-			} else {
-				navigationType = NavigationType.Replace;
-			}
-		}
-
-		// BEFORE TRANSITION
-		async function beforeUnload() {
-			if (
-				cacheEntryToUnload
-				&& cacheEntryToUnloadAction !== UnloadableEntryAction.NoOp
-				&& cacheEntryToUnload.entryConfig.onBeforeUnload
-				&& cacheEntryToUnload.entryConfig.onBeforeUnload.length > 0
-			) {
-				for (const callback of cacheEntryToUnload.entryConfig.onBeforeUnload) {
-					await callback();
-				}
-			}
-		}
-
-		async function beforeLoad() {
-			if (
-				cacheEntryToLoad
-				&& cacheEntryToLoadAction !== LoadableEntryAction.NoOp
-				&& cacheEntryToLoad.entryConfig.onBeforeLoad
-				&& cacheEntryToLoad.entryConfig.onBeforeLoad.length > 0
-			) {
-				for (const callback of cacheEntryToLoad.entryConfig.onBeforeLoad) {
-					await callback();
-				}
-			}
-		}
-
-		await Promise.all([beforeUnload(), beforeLoad()]);
-
-		// DURING TRANSITION
-		async function pause() {
-			if (
-				cacheEntryToUnload
-				&& cacheEntryToUnloadAction === UnloadableEntryAction.Pause
-				&& cacheEntryToUnload.entryConfig.onPause
-				&& cacheEntryToUnload.entryConfig.onPause.length > 0
-			) {
-				for (const callback of cacheEntryToUnload.entryConfig.onPause) {
-					await callback();
-				}
-			}
-		}
-
-		async function resume() {
-			if (cacheEntryToLoad && cacheEntryToLoadAction === LoadableEntryAction.Resume) {
-				const { returnValue } = historyItem.state || {};
-				await waitForHistoryState(() => {
-					// Remove returnValue and scroll
-					window.history.replaceState(
-						{
-							timestamp: historyItem.state.timestamp,
-						} as HistoryState,
-						'',
-						(config.useHash ? '#' : '') + historyItem.location,
-					);
-				});
-				if (cacheEntryToLoad.entryConfig.onResume && cacheEntryToLoad.entryConfig.onResume.length > 0) {
-					for (const callback of cacheEntryToLoad.entryConfig.onResume) {
-						await callback(returnValue);
-					}
-				}
-			}
-		}
-
-		const oldTopMountPoint = cacheEntryToUnload ? cacheEntryToUnload.mountPoint : null;
-		const newTopMountPoint = cacheEntryToLoad.mountPoint;
-
-		if (oldTopMountPoint !== newTopMountPoint) {
-			async function transition() {
-				if (config.mountPoint) {
-					if (!newTopMountPoint.parentElement) {
-						config.mountPoint.appendChild(newTopMountPoint);
-					}
-
-					await config.transitionFn({
-						navigationType,
-						routerMountPoint: config.mountPoint,
-						mountPointToLoad: newTopMountPoint,
-						mountPointToUnload: oldTopMountPoint,
-						scroll: historyItem.state.scroll || { x: 0, y: 0 },
-					});
-
-					if (oldTopMountPoint) {
-						config.mountPoint.removeChild(oldTopMountPoint);
-					}
-				}
-			}
-
-			await Promise.all([
-				transition(),
-				pause(),
-				resume(),
-			]);
-		}
-
-		// AFTER TRANSITION
-		async function afterLoad() {
-			if (
-				cacheEntryToLoad
-				&& cacheEntryToLoadAction !== LoadableEntryAction.NoOp
-				&& cacheEntryToLoad.entryConfig.onAfterLoad
-				&& cacheEntryToLoad.entryConfig.onAfterLoad.length > 0
-			) {
-				for (const callback of cacheEntryToLoad.entryConfig.onAfterLoad) {
-					await callback();
-				}
-			}
-		}
-
-		async function afterUnload() {
-			if (
-				cacheEntryToUnload
-				&& cacheEntryToUnloadAction !== UnloadableEntryAction.NoOp
-				&& cacheEntryToUnload.entryConfig.onAfterUnload
-				&& cacheEntryToUnload.entryConfig.onAfterUnload.length > 0
-			) {
-				for (const callback of cacheEntryToUnload.entryConfig.onAfterUnload) {
-					await callback();
-				}
-			}
-		}
-
-		await Promise.all([afterLoad(), afterUnload()]);
-
-		if (cacheEntryToLoadAction === LoadableEntryAction.New) {
-			currentCache.push(cacheEntryToLoad);
-		}
-		if (cacheEntryToUnload && cacheEntryToUnloadAction === UnloadableEntryAction.Destroy) {
-			cacheEntryToUnload.componentInstance.$destroy();
-			currentCache.splice(currentCache.indexOf(cacheEntryToUnload), 1);
-		}
-		internalCache.set(currentCache);
-		activeCacheEntry = cacheEntryToLoad;
-
-		lastHistoryTimestamp = historyItem.state.timestamp;
+	const pageToLoad = await prepareCacheEntryToActivate(currentCache, getPathname(historyItem.location));
+	if (!pageToLoad) {
+		config.dispatch?.('error', {
+			message: 'no route found',
+			location: historyItem.location,
+		});
+		return;
 	}
+	const pageToUnload = activeCacheEntry;
+	const newTopIndexInCurrentStack = currentCache.findIndex((s) => s.routeMatch === pageToLoad.routeMatch);
+
+	let pageToLoadAction = LoadableEntryAction.NoOp;
+	let pageToUnloadAction = UnloadableEntryAction.NoOp;
+	let navigationType: NavigationType = NavigationType.GoForwardNewState;
+
+	if (!pageToUnload) {
+		pageToLoadAction = LoadableEntryAction.New;
+	} else {
+		if (pageToUnload.routeMatch !== pageToLoad.routeMatch) {
+			if (newTopIndexInCurrentStack !== -1) {
+				pageToLoadAction = LoadableEntryAction.Resume;
+			} else {
+				pageToLoadAction = LoadableEntryAction.New;
+			}
+			if (pageToUnload.entryConfig.resumable) {
+				pageToUnloadAction = UnloadableEntryAction.Pause;
+			} else {
+				pageToUnloadAction = UnloadableEntryAction.Destroy;
+			}
+		}
+
+		if (isNewHistoryItem) {
+			navigationType = NavigationType.GoForwardNewState;
+		} else if (historyItem.state.timestamp > lastHistoryTimestamp) {
+			navigationType = NavigationType.GoForwardResumeState;
+		} else if (historyItem.state.timestamp < lastHistoryTimestamp) {
+			navigationType = NavigationType.GoBackward;
+		} else {
+			navigationType = NavigationType.Replace;
+		}
+	}
+
+	config.dispatch?.('navigation-start', {
+		location: historyItem.location,
+		navigationType,
+		pageToLoad,
+		pageToUnload,
+		pageToLoadAction,
+		pageToUnloadAction,
+	});
+
+	// BEFORE TRANSITION
+	async function beforeUnload() {
+		if (
+			pageToUnload
+			&& pageToUnloadAction !== UnloadableEntryAction.NoOp
+			&& pageToUnload.entryConfig.onBeforeUnload
+			&& pageToUnload.entryConfig.onBeforeUnload.length > 0
+		) {
+			for (const callback of pageToUnload.entryConfig.onBeforeUnload) {
+				await callback();
+			}
+		}
+	}
+
+	async function beforeLoad() {
+		if (
+			pageToLoad
+			&& pageToLoadAction !== LoadableEntryAction.NoOp
+			&& pageToLoad.entryConfig.onBeforeLoad
+			&& pageToLoad.entryConfig.onBeforeLoad.length > 0
+		) {
+			for (const callback of pageToLoad.entryConfig.onBeforeLoad) {
+				await callback();
+			}
+		}
+	}
+
+	await Promise.all([beforeUnload(), beforeLoad()]);
+
+	// DURING TRANSITION
+	async function pause() {
+		if (
+			pageToUnload
+			&& pageToUnloadAction === UnloadableEntryAction.Pause
+			&& pageToUnload.entryConfig.onPause
+			&& pageToUnload.entryConfig.onPause.length > 0
+		) {
+			for (const callback of pageToUnload.entryConfig.onPause) {
+				await callback();
+			}
+		}
+	}
+
+	async function resume() {
+		if (pageToLoad && pageToLoadAction === LoadableEntryAction.Resume) {
+			const { returnValue } = historyItem.state || {};
+			await waitForHistoryState(() => {
+				// Remove returnValue and scroll
+				window.history.replaceState(
+					{
+						timestamp: historyItem.state.timestamp,
+					} as HistoryState,
+					'',
+					(config.useHash ? '#' : '') + historyItem.location,
+				);
+			});
+			if (pageToLoad.entryConfig.onResume && pageToLoad.entryConfig.onResume.length > 0) {
+				for (const callback of pageToLoad.entryConfig.onResume) {
+					await callback(returnValue);
+				}
+			}
+		}
+	}
+
+	const oldTopMountPoint = pageToUnload ? pageToUnload.mountPoint : null;
+	const newTopMountPoint = pageToLoad.mountPoint;
+
+	if (oldTopMountPoint !== newTopMountPoint) {
+		async function transition() {
+			if (config.mountPoint) {
+				if (!newTopMountPoint.parentElement) {
+					config.mountPoint.appendChild(newTopMountPoint);
+				}
+
+				await config.transitionFn({
+					navigationType,
+					routerMountPoint: config.mountPoint,
+					mountPointToLoad: newTopMountPoint,
+					mountPointToUnload: oldTopMountPoint,
+					scroll: historyItem.state.scroll || { x: 0, y: 0 },
+				});
+
+				if (oldTopMountPoint) {
+					config.mountPoint.removeChild(oldTopMountPoint);
+				}
+			}
+		}
+
+		await Promise.all([
+			transition(),
+			pause(),
+			resume(),
+		]);
+	}
+
+	// AFTER TRANSITION
+	async function afterLoad() {
+		if (
+			pageToLoad
+			&& pageToLoadAction !== LoadableEntryAction.NoOp
+			&& pageToLoad.entryConfig.onAfterLoad
+			&& pageToLoad.entryConfig.onAfterLoad.length > 0
+		) {
+			for (const callback of pageToLoad.entryConfig.onAfterLoad) {
+				await callback();
+			}
+		}
+	}
+
+	async function afterUnload() {
+		if (
+			pageToUnload
+			&& pageToUnloadAction !== UnloadableEntryAction.NoOp
+			&& pageToUnload.entryConfig.onAfterUnload
+			&& pageToUnload.entryConfig.onAfterUnload.length > 0
+		) {
+			for (const callback of pageToUnload.entryConfig.onAfterUnload) {
+				await callback();
+			}
+		}
+	}
+
+	await Promise.all([afterLoad(), afterUnload()]);
+
+	if (pageToLoadAction === LoadableEntryAction.New) {
+		currentCache.push(pageToLoad);
+	}
+	if (pageToUnload && pageToUnloadAction === UnloadableEntryAction.Destroy) {
+		pageToUnload.componentInstance.$destroy();
+		currentCache.splice(currentCache.indexOf(pageToUnload), 1);
+	}
+	internalCache.set(currentCache);
+	activeCacheEntry = pageToLoad;
+
+	lastHistoryTimestamp = historyItem.state.timestamp;
+
+	config.dispatch?.('navigation-end', {
+		location: historyItem.location,
+		navigationType,
+		pageToLoad,
+		pageToUnload,
+		pageToLoadAction,
+		pageToUnloadAction,
+	});
 }
 
 /* API FUNCTIONS */

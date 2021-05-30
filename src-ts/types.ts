@@ -74,6 +74,8 @@ export interface Config {
 	mountPoint: null | HTMLElement,
 	/** A function that handles the transition between two pages */
 	transitionFn: TransitionFunction,
+	/** The Svelte dispatcher of the current instance of the StackRouter */
+	dispatch: ((eventName: string, eventData?: Record<any, any>) => void) | null,
 }
 
 export interface ComponentConfig {

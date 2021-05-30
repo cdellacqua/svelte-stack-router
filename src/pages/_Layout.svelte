@@ -19,5 +19,5 @@
 </script>
 
 <div style="padding: 10px; overflow: hidden">
-	<StackRouter {routes} {transitionFn} />
+	<StackRouter {routes} {transitionFn} on:navigation-end={console.log} on:navigation-start={console.log} on:error={console.error} />
 </div>

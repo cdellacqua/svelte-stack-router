@@ -49,6 +49,18 @@ If you have a component which shouldn't be paused or resumed by the StackRouter,
 
 Doing this will make your component disposable, so that it will be mounted and destroyed and never paused or resumed.
 
+## Router events
+
+You can listen for the following events:
+- `on:navigation-start` emitted before unloading the old page and before loading the new page
+- `on:navigation-end` emitted after unloading the old page and after loading the new page
+- `on:error` emitted when the current location doesn't match with any available route
+
+Example:
+```svelte
+<StackRouter {routes} on:navigation-start={() => alert('navigation started')} />
+```
+
 ## Navigation functions and links
 
 The following functions enable programmatic navigation:

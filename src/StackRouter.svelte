@@ -1,5 +1,5 @@
 <script>
-	import { onDestroy, onMount } from "svelte";
+	import { createEventDispatcher, onDestroy, onMount } from "svelte";
 
 	import {
 		handleStackRouterComponentMount,
@@ -19,6 +19,7 @@
 	/** @type {Record.<string, import('svelte').SvelteComponent>} a key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent */
 	export let routes;
 
+	let dispatch = createEventDispatcher();
 	let mountPoint;
 	onMount(() => {
 		handleStackRouterComponentMount({
@@ -28,6 +29,7 @@
 			useHash,
 			restoreScroll,
 			transitionFn,
+			dispatch,
 		});
 	});
 	onDestroy(() => {
