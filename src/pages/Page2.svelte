@@ -8,7 +8,7 @@
 		onAfterLoad,
 		onAfterUnload,
 		onBeforeLoad,
-	} from "../stack-router";
+	} from "../.";
 	import Links from "../components/Links.svelte";
 
 	let status = [];

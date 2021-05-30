@@ -1,9 +1,7 @@
 <script>
-import { setResumable } from "../stack-router";
+	import { replace, setResumable } from "../.";
 
-	import { replace } from "../stack-router";
-
-	replace('/');
+	replace("/");
 
 	setResumable(false);
 </script>

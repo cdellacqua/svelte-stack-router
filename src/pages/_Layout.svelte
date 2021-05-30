@@ -1,7 +1,5 @@
 <script>
-	import { slide, dive, noAnimation } from "../transition-functions";
-	import { location, cache } from "../stack-router";
-	import StackRouter from "../StackRouter.svelte";
+	import { StackRouter, location, cache, slide, dive, noAnimation } from "../.";
 	import routes from "../_routes";
 
 	$: console.log($cache.map((entry) => entry.component.name));

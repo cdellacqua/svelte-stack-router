@@ -1,6 +1,6 @@
 <script>
 	import { onMount, onDestroy } from "svelte";
-	import { onPause, onResume, pathname, onBeforeUnload } from "../stack-router";
+	import { onPause, onResume, pathname, onBeforeUnload } from "../.";
 	import Links from "../components/Links.svelte";
 
 	export let params = {
