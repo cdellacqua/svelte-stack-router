@@ -5,100 +5,109 @@ Bridging the gap between Native Apps and WebApps. A Stack-based Svelte Router th
 ## Working demo
 * [App.svelte](https://github.com/cdellacqua/svelte-stack-router/blob/master/src/App.svelte)
 
-You can clone this repo and run `npm run dev` to see it working
+You can clone this repo, run `npm i` and `npm run dev` to try it out
 
 ## Quick setup
 
-- open/create the component that will wrap the ones you want to be able to navigate
-- import the init function and the StackRouter component
-- call the init function passing the routes<sup>1</sup> and optionally the other configuration parameters<sup>2</sup>
-- add the `<StackRouter />` tag somewhere in the HTML section
+- open/create the component that will contain the StackRouter
+- define your routes as key-value pairs, like in the following example
+	```svelte
+	let myRoutes = {
+		"/": Home,
+		"/my-page": PageComponent,
+		"/my-other-page/:someString": OtherPageThatAcceptsAParameter,
+		"/my-other-page2/:optionalParam?": OtherPageThatAcceptsAnOptionalParameter,
+		"*": "NotFound",
+	};
+	```
+- import the StackRouter component
+- add `<StackRouter routes={myRoutes} />` somewhere in the HTML section
 
-<sup>1</sup> routes are defined as key-value pairs, like in the following example
-
-```
-{
-	"/": Home,
-	"/my-page": PageComponent,
-	"/my-other-page/:someString": OtherPageThatAcceptsAParameter,
-	"/my-other-page2/:optionalParam?": OtherPageThatAcceptsAnOptionalParameter,
-	"*": "MatchAll"
-}
-```
-
-<sup>2</sup> the initialization function is defined as follows (note that only the first argument is required)
-
-`init(routes: Record<string, SvelteComponent>, restoreScroll: boolean = true, useHash: boolean = true)`
 
 ## How it works
 
-This library takes advantage of the ability of Svelte of mutating the DOM without re-rendering unchanged HTML.
+Page components are cached, this ensures that going back in the browser history resumes the complete previous state.
 
-When you navigate to a new page, the component associated with that URL gets instantiated - nothing special about this behaviour.
-
-Things get interesting when you go back in your history or go to a page that had already been visited.
-
-**Previously instantiated pages don't get destroyed by default, they just get paused and resumed to reduce re-renders and preserve their state**
-
-What happens is that the browser history gets sorted to bring the previously visited page on top of the others.
-
-For example:
-
-Suppose you have 3 resumable pages (see [`setResumable`](#enhanced-lifecycle-functions) below), let's call them P1, P2, P3.
-The user visits your pages in the following order P1 -> P2 -> P3.
-
-Each time the user goes to a new page, the previous component gets "paused". Its HTML is not removed from the page, it just isn't displayed.
-
-If the user goes to P2, the following happens:
-- the StackRouter sees that P2 had already been created, so its HTML is still in the DOM
-- P2 is raised to the top and displayed, while P3 is lowered; in other words, P2 is Resumed, while P3 is Paused
-- the new stack is P1 -> P3 -> P2
-- the browser history gets modified to reflect this new order
-
-If the user presses the back button, then P2, which is the current top of the stack, gets destroyed.
-The page order is not modified: P1 -> P3
+In other words: **previously instantiated pages don't get destroyed by default, they just get paused and resumed to reduce re-renders and preserve their full state**
 
 ## Enhanced lifecycle functions
 
-In addition to the `onMount` and `onDestroy` lifecycle functions provided by Svelte, this library offers `onPause` and `onResume`.
-- `onPause` handlers are called **before** a component is lowered
-- `onResume` handlers are called **after** a component has been raised
-- `onBeforeUnload` handlers are called **before** a component is **lowered or destroyed** and before any pause handlers in case of resumable components
-- `onAfterLoad` handlers are called **after** a component has been **raised or mounted** and after any resume handlers in case of resumable components
+In addition to the `onMount` and `onDestroy` lifecycle functions provided by Svelte, this library offers `onPause`, `onResume`, `onBeforeLoad`, `onBeforeUnload`, `onAfterLoad` and `onAfterUnload`.
 
-All these new lifecycle functions accept synchronous and asynchronous callbacks. In case of asynchronous callbacks each one of them gets executed
-in a synchronous manner.
+All these new lifecycle functions accept synchronous and asynchronous callbacks. In case of asynchronous callbacks they are executed one by one in the same order they were registered.
 
-`onResume` also supports a return value that can be passed using the `pop` function (see the [Returning values](#returning-values)).
-Both these lifecycle functions can be called by the Page component and by its children.
+The complete lifecycle is (|| = semi-parallel execution, achieved with Promise.all):
+- create the page component if not in cache
+- before-unload previous component || before-load new component
+- pause previous component if resumable || resume new component if in cache || animate-transition
+- after-unload previous component || after-load new component
+- destroy previous component if not resumable
 
-If you have a component which shouldn't be paused or resumed by the StackRouter, you can call:
-- `setResumable`
+All these additional lifecycle functions can be called by the Page component and by its children **during initialization**, this means they should be invoked directly in the script section of the Svelte component (e.g. not inside onMount or in reactive statements).
 
-and pass `false`. Doing this will make you component disposable, so that it will be mounted and destroyed and never paused or resumed.
+If you have a component which shouldn't be paused or resumed by the StackRouter, you can call `setResumable(false)`
+
+Doing this will make your component disposable, so that it will be mounted and destroyed and never paused or resumed.
 
 ## Navigation functions and links
 
-The following functions that enables programmatic navigation are provided:
+The following functions enable programmatic navigation:
 - `push('/some-route')`
 - `pop()` or `pop({ some: 'return value' })` (see [Returning values](#returning-values))
 - `replace('/a-route')`
 
-To create links this library provides a custom `use:link` action that you can add to your `<a>` elements. This action serves two purposes:
-- if you are using the router in "hash mode" (e.g. in a client-side rendering context), it lets you write paths without having to manually add the `#` prefix to all the `href`. For example `<a href="/example-1" use:link>Example</a>` is automatically
+This library also provides a custom `use:link` action that you can add to your `<a>` elements to create links. This action serves two purposes:
+- if you are using the router in "hash mode" (e.g. in a purely client-side rendering context), it lets you write paths without having to manually add the `#` prefix to all the `href`. For example `<a href="/example-1" use:link>Example</a>` is automatically
 converted to `<a href="#/example-1">Example</a>`. This is particularly helpful if you later decide to switch to "path mode" (see next point)
-- if you are using the router in "path mode" (e.g. in a server-side rendering context), it prevents the default browser navigation behavior and, on user click, pushes the new location client-side
+- if you are using the router in "path mode" (e.g. in a server-side rendering context), it prevents the default browser navigation behavior and, on user click, pushes the new location using the History API of the browser
 
-Those functions are inspired by the ones offered by [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router).
+These navigation functions have been heavily inspired by [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router).
 
 ## Returning values
 
 When the `pop` function is called it can receive an optional parameter, which acts like a return value.
 
-This value will be passed on as an argument to all the callback functions that are registered in the `onResume` hook of the component that is about to be resumed, thus allowing the two components to communicate with each other.
+This value will be passed on as an argument to all the callback functions that are registered in the `onResume` hook of the component that is about to be resumed, thus allowing two components to communicate with each other.
 
 For example:
 - suppose the user is on `/selection`, a page that presents them with a list of items and expects them to pick one. In the same page there is an `Add` button
 - the user clicks on the `Add` button, thus navigating to `/new`, a page with a form where they can POST a new item to the list
 - the user submits the form and, in the submit handler, `pop` is called with the `id` of the newly created entity
 - the user gets brought back to `/selection`, which, being resumable, can handle the return value in its `onResume` callback(s) and show the selection on the newly created entity
+
+
+## Customizing behavior
+
+The `<StackRouter>` component supports a variety of options:
+
+|name|type|description|default|
+|-|-|-|-|
+|defaultResumable|boolean|whether or not the default behavior should be to resume or recreate the components|true|
+|useHash|boolean|whether or not to prefix routes with '#' to implement a server-agnostic client side routing (e.g. no need to redirect 404 to index)|true|
+|restoreScroll|boolean|whether or not to restore the scroll position when navigating backwards|true|
+|transitionFn|TransitionFunction|a function that handles the transition between two pages|dive(300)|
+|routes|Record.<string, SvelteComponent>|a key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent|N/A - **required**|
+
+### TransitionFunction and available transitions
+
+This library provides 3 types of transitions between pages:
+- `dive(milliseconds)` transition with a dive effect
+- `slide(milliseconds)` transition with a slide effect
+- `noAnimation()` transition without any animation
+
+
+You can also implement a custom transition animation by implementing a transition function that reflect the following type definition:
+```typescript
+/**
+ * A function that handles the transition between two pages
+ * @param {NavigationType} data.navigationType describes the navigation that occurred (e.g. backward, replace, forward, ...)
+ * @param {HTMLElement} data.mountPointToLoad the mount point of the page that is being loaded
+ * @param {HTMLElement} data.mountPointToUnload the mount point of the page that is being unloaded
+ * @param {HTMLElement} data.routerMountPoint the router mount point, when this function is called it contains both the mountPointToLoad and the mountPointToUnload
+ * @param {{x: number, y: number}} data.scroll if scroll restoration is enabled and the current component is being resumed, this object contains the x and y coordinates needed to bring the window scrollbars back to where they were when the component was paused
+ * @return {Promise} a promise that resolves once the transition has finished
+ */
+export type TransitionFunction = (data: TransitionFunctionData) => Promise<void>;
+```
+
+You can also generate a TransitionFunction using the helpers provided in transition-functions.js

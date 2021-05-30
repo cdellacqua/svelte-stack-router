@@ -44,3 +44,6 @@ testem.log
 Thumbs.db
 
 /src/stack-router.js
+/src/types.js
+/src/transition-functions.js
+/src/utils.js

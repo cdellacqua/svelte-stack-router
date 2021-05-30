@@ -1,0 +1,49 @@
+html, body {
+	margin: 0;
+	padding: 0;
+	font-family: sans-serif;
+	text-align: center;
+}
+
+body {
+	color: white;
+	background-color: #1c1c1c;
+}
+
+a {
+	text-decoration: none;
+	padding: 0.5em 1em;
+	margin: 0.5em 1em;
+	color: gray;
+	background-color: lavender;
+	display: inline-block;
+	font-size: 1em;
+}
+
+button {
+	border: none;
+	background-color: antiquewhite;
+	color: gray;
+	font-size: 1em;
+	padding: 0.5em 1em;
+	margin: 0.5em 1em;
+}
+
+h1, h2 {
+	display: inline-block;
+	margin: 0;
+	text-align: center;
+	position: relative;
+	padding-bottom: 20px;
+}
+
+h1::after {
+	content: ' ';
+	display: block;
+	position: absolute;
+	left: 5%;
+	right: 5%;
+	margin-top: 10px;
+	height: 1px;
+	background-color: gray;
+}

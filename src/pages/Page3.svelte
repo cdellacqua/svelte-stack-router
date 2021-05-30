@@ -1,6 +1,11 @@
 <script>
 	import { onMount, onDestroy } from "svelte";
-	import { onPause, onResume, pathname, pop, link } from "../stack-router";
+	import { onPause, onResume, pathname } from "../stack-router";
+	import Links from "../components/Links.svelte";
+
+	export let params = {
+		demo: null,
+	};
 
 	let status = [];
 	onMount(() => {
@@ -13,18 +18,16 @@
 		status = [...status, "resumed" + (retVal ? `, received: "${retVal}"` : "")];
 	});
 	onDestroy(() => {
-		console.log('destroyed'); // will not be executed
+		console.log("destroyed"); // will not be executed
 	});
 </script>
 
-<h1>Example Page 3</h1>
-<h2>{$pathname}</h2>
-<a use:link href="/">Go to Page1</a>
-<a use:link href="/2">Go to Page2</a>
-<a use:link href="/3">Go to Page3</a>
-<a use:link href="/4">Go to Page1 - second route</a>
-<a use:link href="/5">Go to 404</a>
-<button on:click={() => pop('bye!')}>Go back passing a returnValue</button>
-<br />
+<div style="text-align: center">
+	<h2>Current path: {$pathname}</h2>
+</div>
+<div style="text-align: center">
+	<h1>Example Page 3, demo param: {params.demo}</h1>
+</div>
+<Links />
 <div>Events:</div>
-{@html status.join('<br />')}
+{@html status.join("<br />")}

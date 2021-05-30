@@ -1,6 +1,16 @@
 <script>
 	import { onMount, onDestroy } from "svelte";
-	import { onBeforeUnload, onPause, onResume, pathname, setResumable, onAfterLoad, link } from "../stack-router";
+	import {
+		onBeforeUnload,
+		onPause,
+		onResume,
+		pathname,
+		setResumable,
+		onAfterLoad,
+		onAfterUnload,
+		onBeforeLoad,
+	} from "../stack-router";
+	import Links from "../components/Links.svelte";
 
 	let status = [];
 	onMount(() => {
@@ -13,7 +23,7 @@
 		status = [...status, "resumed" + (retVal ? `, received: "${retVal}"` : "")]; // will not be executed
 	});
 	onDestroy(() => {
-		console.log('destroyed');
+		console.log("destroyed");
 	});
 	onBeforeUnload(() => {
 		status = [...status, "before unload, i'll just wait 1s"];
@@ -22,16 +32,22 @@
 	onAfterLoad(() => {
 		status = [...status, "after load"];
 	});
+	onAfterUnload(() => {
+		status = [...status, "after unload"];
+	});
+	onBeforeLoad(() => {
+		status = [...status, "before load"];
+	});
 	setResumable(false);
 </script>
 
-<h1>Example Page 1</h1>
-<h2>{$pathname}</h2>
-<a use:link href="/">Go to Page1</a>
-<a use:link href="/2">Go to Page2</a>
-<a use:link href="/3">Go to Page3</a>
-<a use:link href="/4">Go to Page1 - second route</a>
-<a use:link href="/5">Go to 404</a>
+<div style="text-align: center">
+	<h2>Current path: {$pathname}</h2>
+</div>
+<div style="text-align: center">
+	<h1>Example Page 1</h1>
+</div>
+<Links />
 <br />
 <div>Events:</div>
-{@html status.join('<br />')}
+{@html status.join("<br />")}

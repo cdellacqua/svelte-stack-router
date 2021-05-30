@@ -1,65 +1,37 @@
 import regexparam from 'regexparam';
-import { SvelteComponent, tick } from 'svelte';
+import { tick } from 'svelte';
+import { noop } from 'svelte/internal';
 import {
 	readable, derived, writable, get,
 } from 'svelte/store';
-import Placeholder from './Placeholder.svelte';
+import { noAnimation } from './transition-functions';
+import {
+	CacheEntry,
+	ComponentConfig,
+	Config,
+	HistoryItem,
+	HistoryState,
+	NavigationType,
+	LoadableEntryAction,
+	UnloadableEntryAction,
+	Routes,
+} from './types';
+import { dispatchCustomEvent, sleep } from './utils';
 
-function noop() { }
-
-function animationFrame() {
-	return new Promise((res) => requestAnimationFrame(() => res(undefined)));
-}
-
-function sleep(ms: number) {
-	return new Promise((res) => setTimeout(() => res(undefined), ms));
-}
-
-function dispatchCustomEvent(element: HTMLElement, eventName: string) {
-	element.dispatchEvent(new CustomEvent(eventName, {
-		bubbles: true,
-		cancelable: true,
-	}));
-}
-
-export interface HistoryState {
-	timestamp: number,
-	returnValue?: any,
-}
-
-export interface HistoryItem {
-	location: string,
-	state: HistoryState,
-}
-
-const config = {
-	inhibitLocationStoreUpdate: false,
-	inhibitHref: false,
+const config: Config = {
+	defaultResumable: true,
 	useHash: true,
 	restoreScroll: true,
-	routes: {} as Record<string, SvelteComponent>,
+	routes: {},
+	mountPoint: null,
+	transitionFn: noAnimation(),
 };
 
-export interface StackEntry {
-	scrollX: number,
-	scrollY: number,
-	component: SvelteComponent,
-	pathname: string,
-	params: object | undefined,
-	routeMatch: string,
-	onResume?: ((returnValue: any) => any)[],
-	onPause?: (() => any)[],
-	onBeforeUnload?: (() => any)[],
-	onAfterLoad?: (() => any)[],
-	zIndex: number,
-	resumable: boolean,
-}
+const internalCache = writable<CacheEntry[]>([]);
+/** Current component cache readable store */
+export const cache = derived(internalCache, (x) => x);
 
-type TopStackEntry = Omit<StackEntry, 'zIndex' | 'scrollX' | 'scrollY'>;
-
-export const stack = writable<StackEntry[]>([]);
-
-/** LOCATION */
+/* LOCATION */
 function getLocation(): string {
 	if (config.useHash) {
 		const hashIndex = window.location.href.indexOf('#/');
@@ -69,11 +41,21 @@ function getLocation(): string {
 	const relativeUrl = (window.location.pathname || '/') + window.location.search;
 	return relativeUrl;
 }
-let previousLocation = getLocation();
-export const locationPreview = readable(previousLocation, (set) => {
-	const handlePopState = () => {
+
+// Used in the `pop` function to prevent a double trigger of the PopStateEvent
+let ignorePopStateEvent = false;
+
+/**
+ * Readable store representing the current location
+ */
+export const location = readable(getLocation(), (set) => {
+	let previousLocation: string | null = null;
+	const handlePopState = async () => {
+		if (ignorePopStateEvent) {
+			return;
+		}
 		const newLocation = getLocation();
-		if (!config.inhibitLocationStoreUpdate && previousLocation !== newLocation) {
+		if (previousLocation !== newLocation) {
 			previousLocation = newLocation;
 			set(newLocation);
 		}
@@ -83,9 +65,8 @@ export const locationPreview = readable(previousLocation, (set) => {
 		window.removeEventListener('popstate', handlePopState);
 	};
 });
-export const location = writable(previousLocation);
 
-/** PATHNAME */
+/* PATHNAME */
 function getPathname(location: string): string {
 	const queryStringPosition = location.indexOf('?');
 	if (queryStringPosition !== -1) {
@@ -93,9 +74,12 @@ function getPathname(location: string): string {
 	}
 	return location;
 }
+/**
+ * Readable store that contains the pathname part of the location
+ */
 export const pathname = derived(location, getPathname);
 
-/** SEARCH */
+/* SEARCH */
 function getSearch(location: string): string {
 	const queryStringPosition = location.indexOf('?');
 	if (queryStringPosition !== -1) {
@@ -103,17 +87,20 @@ function getSearch(location: string): string {
 	}
 	return '';
 }
+/**
+ * Readable store that contains the search part of the location
+ */
 export const search = derived(location, getSearch);
 
-/** UTILS */
+/* UTILS */
 let lastHistoryTimestamp: number;
 async function waitForHistoryState(callback: () => void): Promise<void> {
 	const historyState = window.history.state;
+
 	callback();
 
-	// This loop is needed to ensure that the browser updates the history.state object.
-	// Apparently, the update is not synchronous and the History API functions (pushState/replaceState/popState) don't
-	// provide any mechanism to wait until the update actually happens
+	// Wait for history.state to pick the current state (without this sleep history.state points to the previous state)
+	// See https://developer.mozilla.org/en-US/docs/Web/API/Window/popstate_event
 	let limit = 100;
 	while (historyState === window.history.state && limit) {
 		await sleep(2);
@@ -134,271 +121,7 @@ function buildParams(pathname: string, routeKey: string): Record<string, string 
 	return Object.keys(params).length === 0 ? undefined : params;
 }
 
-function getNewTop(stackEntries: StackEntry[], pathname: string): StackEntry | TopStackEntry | null {
-	const routeKeys = Object.keys(config.routes);
-	const routeKey = routeKeys.find((routeKey) => {
-		const { pattern } = regexparam(routeKey);
-		return pattern.test(pathname);
-	});
-	if (routeKey === undefined || routeKey === null) {
-		return null;
-	}
-	const resumableEntryIndex = stackEntries.findIndex(
-		(s) => s.routeMatch === routeKey,
-	);
-	if (resumableEntryIndex !== -1) {
-		stackEntries[resumableEntryIndex].component = config.routes[routeKey]; // for backward navigation in case of Placeholders
-		if (stackEntries[resumableEntryIndex].pathname !== pathname) {
-			stackEntries[resumableEntryIndex].params = buildParams(pathname, routeKey);
-			stackEntries[resumableEntryIndex].pathname = pathname;
-		}
-		return stackEntries[resumableEntryIndex];
-	}
-	return {
-		component: config.routes[routeKey],
-		params: buildParams(pathname, routeKey),
-		pathname,
-		routeMatch: routeKey,
-		resumable: true,
-	};
-}
-
-function stackTop(stackEntries: StackEntry[]): StackEntry | null {
-	return stackEntries
-		.reduce((top: StackEntry | null, curr) => (top === null || curr.zIndex > top.zIndex) ? curr : top, null);
-}
-
-function stackPush(stackEntries: StackEntry[], entry: TopStackEntry): StackEntry[] {
-	stackEntries.push({
-		...entry,
-		zIndex: stackEntries.length,
-		scrollX: 0,
-		scrollY: 0,
-	});
-	return stackEntries;
-}
-
-let historyItems: HistoryItem[] = [];
-async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
-	config.inhibitHref = true;
-	const currentStack: StackEntry[] = get(stack);
-
-	// console.debug('history before');
-	// console.debug(historyItems);
-	// console.debug('stack before');
-	// console.debug(currentStack);
-
-	const newHistoryItem = !historyItem.state;
-	if (newHistoryItem) {
-		historyItem.state = {
-			timestamp: new Date().getTime(),
-		};
-		await waitForHistoryState(() => window.history.replaceState(historyItem.state, '', (config.useHash ? '#' : '') + historyItem.location));
-	}
-
-	const newTop = getNewTop(currentStack, getPathname(historyItem.location));
-	if (!newTop) {
-		console.error('no route found');
-	} else {
-		const oldTop = stackTop(currentStack);
-		const newTopAlreadyInStack = currentStack.some((s) => s.routeMatch === newTop.routeMatch);
-
-		if (!oldTop) {
-			historyItems = [historyItem];
-			stackPush(currentStack, newTop);
-		} else if (oldTop.routeMatch !== newTop.routeMatch) {
-			if (!oldTop.resumable) {
-				if (oldTop.onBeforeUnload && oldTop.onBeforeUnload.length > 0) {
-					for (const callback of oldTop.onBeforeUnload) {
-						await callback();
-					}
-				}
-				oldTop.onBeforeUnload = undefined;
-				oldTop.onAfterLoad = undefined;
-
-				oldTop.scrollX = 0;
-				oldTop.scrollY = 0;
-				oldTop.onResume = undefined;
-				oldTop.onPause = undefined;
-				oldTop.component = Placeholder as unknown as SvelteComponent;
-			} else {
-				if (oldTop.onBeforeUnload && oldTop.onBeforeUnload.length > 0) {
-					for (const callback of oldTop.onBeforeUnload) {
-						await callback();
-					}
-				}
-				oldTop.scrollX = window.scrollX;
-				oldTop.scrollY = window.scrollY;
-				if (oldTop.onPause && oldTop.onPause.length > 0) {
-					for (const callback of oldTop.onPause) {
-						await callback();
-					}
-				}
-			}
-			if (newTopAlreadyInStack) {
-				config.inhibitLocationStoreUpdate = true;
-
-				const newTopStackEntry = newTop as StackEntry;
-				if (newHistoryItem || historyItem.state.timestamp > lastHistoryTimestamp) { // FORWARD WITH NEW HISTORY ITEM OR WITH ARROW-RIGHT BROWSER KEY
-					if (!newHistoryItem) {
-						// console.debug('forward');
-						historyItems.push(historyItem);
-					} else { // FORWARD WITH NEW HISTORY ITEM
-						// console.debug('push - existing');
-
-						if (currentStack.length - 1 - newTopStackEntry.zIndex <= historyItems.length - 1) {
-							// console.debug('BACK FROM ' + window.location.href); 
-							await waitForHistoryState(() => window.history.back());
-							// console.debug('TO ' + window.location.href);
-
-							const backCount = currentStack.length - 1 - newTopStackEntry.zIndex;
-							for (let i = 0; i < backCount; i++) {
-								// console.debug('BACK FROM ' + window.location.href); 
-								await waitForHistoryState(() => window.history.back());
-								// console.debug('TO ' + window.location.href);
-							}
-							// console.debug('REPLACE FROM ' + window.location.href);
-							await waitForHistoryState(() => window.history.replaceState(
-								historyItems[historyItems.length - backCount].state,
-								'',
-								(config.useHash ? '#' : '') + historyItems[historyItems.length - backCount].location,
-							));
-							// console.debug('TO ' + window.location.href);
-							for (let i = 0; i < backCount - 1; i++) {
-								// console.debug('PUSH FROM ' + window.location.href);
-								await waitForHistoryState(() => window.history.pushState(
-									historyItems[historyItems.length - backCount + 1 + i].state,
-									'',
-									(config.useHash ? '#' : '') + historyItems[historyItems.length - backCount + 1 + i].location,
-								));
-								// console.debug('TO ' + window.location.href);
-							}
-							// console.debug('PUSH FROM ' + window.location.href);
-							await waitForHistoryState(() => window.history.pushState(
-								historyItem.state,
-								'',
-								(config.useHash ? '#' : '') + historyItem.location,
-							));
-							// console.debug('TO ' + window.location.href);
-
-							historyItems.splice(historyItems.length - backCount - 1, 1);
-							historyItems.push(historyItem);
-						} else {
-							historyItems.push(historyItem);
-						}
-					}
-					currentStack.forEach((entry) => {
-						if (entry.zIndex > newTopStackEntry.zIndex) {
-							entry.zIndex--;
-						}
-					});
-					newTopStackEntry.zIndex = currentStack.length - 1;
-				} else if (historyItem.state.timestamp < lastHistoryTimestamp) { // BACK
-					// console.debug('back');
-					currentStack.forEach((entry) => {
-						entry.zIndex++;
-					});
-					oldTop.zIndex = 0;
-
-					historyItems.splice(historyItems.length - 1, 1);
-				} else if (historyItem.state.timestamp === lastHistoryTimestamp) { // REPLACE
-					// console.debug('replace - existing');
-					if (currentStack.length - 1 - newTopStackEntry.zIndex <= historyItems.length - 1) {
-						const backCount = currentStack.length - 1 - newTopStackEntry.zIndex;
-						for (let i = 0; i < backCount; i++) {
-							await waitForHistoryState(() => window.history.back());
-						}
-						await waitForHistoryState(() => window.history.replaceState(
-							historyItems[historyItems.length - backCount].state,
-							'',
-							(config.useHash ? '#' : '') + historyItems[historyItems.length - backCount].location,
-						));
-						for (let i = 0; i < backCount - 1; i++) {
-							await waitForHistoryState(() => window.history.pushState(
-								historyItems[historyItems.length - backCount + 1 + i].state,
-								'',
-								(config.useHash ? '#' : '') + historyItems[historyItems.length - backCount + 1 + i].location,
-							));
-						}
-						await waitForHistoryState(() => window.history.replaceState(
-							historyItem.state,
-							'',
-							(config.useHash ? '#' : '') + historyItem.location,
-						));
-
-						historyItems.splice(historyItems.length - backCount - 1, 1);
-						historyItems[historyItems.length - 1] = historyItem;
-					} else {
-						historyItems[historyItems.length - 1] = historyItem;
-					}
-
-					currentStack.forEach((entry) => {
-						entry.zIndex++;
-					});
-					oldTop.zIndex = 0;
-
-					currentStack.forEach((entry) => {
-						if (entry.zIndex > newTopStackEntry.zIndex) {
-							entry.zIndex--;
-						}
-					});
-					newTopStackEntry.zIndex = currentStack.length - 1;
-				}
-
-				config.inhibitLocationStoreUpdate = false;
-			} else {
-				if (historyItem.state && historyItem.state.timestamp === lastHistoryTimestamp) {
-					// console.debug('replace - new');
-					currentStack.forEach((entry) => {
-						entry.zIndex++;
-					});
-					oldTop.zIndex = 0;
-
-					historyItems[historyItems.length - 1] = historyItem;
-				} else {
-					// console.debug('push - new');
-					historyItems.push(historyItem);
-				}
-				stackPush(currentStack, newTop);
-			}
-		}
-
-		lastHistoryTimestamp = historyItem.state.timestamp;
-		
-		stack.set(currentStack);
-		
-		await tick();
-
-		const newStackTopEntry = stackTop(currentStack)!;
-		if (newTopAlreadyInStack && newStackTopEntry.resumable) {
-			const { returnValue } = historyItem.state || {};
-			if (newStackTopEntry.onResume && newStackTopEntry.onResume.length > 0) {
-				for (const callback of newStackTopEntry.onResume) {
-					await callback(returnValue);
-				}
-			}
-		}
-		if (newStackTopEntry.onAfterLoad && newStackTopEntry.onAfterLoad.length > 0) {
-			for (const callback of newStackTopEntry.onAfterLoad) {
-				await callback();
-			}
-		}
-
-		if (config.restoreScroll) {
-			await animationFrame();
-
-			window.scrollTo(newStackTopEntry.scrollX, newStackTopEntry.scrollY);
-		}
-	}
-	// console.debug('history after');
-	// console.debug(historyItems);
-	// console.debug('stack after');
-	// console.debug(currentStack);
-
-	location.set(historyItem.location);
-	config.inhibitHref = false;
-}
-
+/* LOCATION UPDATE CONSUMER */
 const historyItemsQueue: HistoryItem[] = [];
 let consumingQueue = false;
 async function consumeQueue(): Promise<void> {
@@ -413,52 +136,335 @@ async function consumeQueue(): Promise<void> {
 	consumingQueue = false;
 }
 
-export function init(routes: Record<string, SvelteComponent>, restoreScroll = true, useHash = true): void {
-	config.routes = routes;
-	config.restoreScroll = restoreScroll;
-	config.useHash = useHash;
+/* INIT & DESTROY */
+let locationSubscription = noop;
+
+export function updateConfig(initConfig: Partial<Omit<Config, 'mountPoint'>> & { routes: Routes }): void {
+	(Object.keys(initConfig) as (keyof Omit<Config, 'mountPoint'>)[])
+		.forEach((key) => {
+			if (initConfig[key] !== undefined) {
+				config[key] = initConfig[key] as any;
+			}
+		});
+
+	if ('scrollRestoration' in window.history) {
+		window.history.scrollRestoration = config.restoreScroll ? 'manual' : 'auto';
+	}
 }
 
-let locationPreviewSubscription = noop;
-export function handleStackRouterComponentMount(): void {
-	locationPreview
+export function handleStackRouterComponentMount(initConfig: Partial<Config> & { routes: Routes, mountPoint: HTMLDivElement }): void {
+	updateConfig(initConfig);
+
+	const firstRun = true;
+	let previousState: HistoryState | null = null;
+	locationSubscription = location
 		.subscribe(
-			($locationPreview) => {
+			async ($location) => {
+				// Wait for history.state to pick the current state (without this sleep history.state can point to the previous state)
+				// See https://developer.mozilla.org/en-US/docs/Web/API/Window/popstate_event
+				let currentState = window.history.state;
+				if (!firstRun && currentState !== undefined) {
+					let limit = 100;
+					while (previousState === currentState && limit) {
+						await sleep(2);
+						limit--;
+						currentState = window.history.state;
+					}
+					if (previousState === currentState) {
+						console.warn('unable to detect history change');
+					}
+				}
 				historyItemsQueue.push({
-					location: $locationPreview,
-					state: window.history.state,
+					location: $location,
+					state: currentState,
 				});
+				previousState = currentState;
 				consumeQueue();
 			},
 		);
 }
 
 export function handleStackRouterComponentDestroy(): void {
-	locationPreviewSubscription();
-	stack.set([]);
-	locationPreviewSubscription = noop;
+	locationSubscription();
+	internalCache.set([]);
+	locationSubscription = noop;
+	config.mountPoint = null;
 }
 
-/** API FUNCTIONS */
+let editableEntryConfig: ComponentConfig | null = null;
+async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string): Promise<CacheEntry | CacheEntry | null> {
+	const routeKeys = Object.keys(config.routes);
+	const routeKey = routeKeys.find((routeKey) => {
+		const { pattern } = regexparam(routeKey);
+		return pattern.test(pathname);
+	});
+	if (routeKey === undefined || routeKey === null) {
+		return null;
+	}
+	const params = buildParams(pathname, routeKey);
+
+	const resumableEntry = cache.find(
+		(s) => s.routeMatch === routeKey,
+	);
+
+	let entry: CacheEntry | undefined;
+	if (resumableEntry) {
+		editableEntryConfig = resumableEntry.entryConfig;
+		entry = resumableEntry;
+
+		if (resumableEntry.pathname !== pathname) {
+			resumableEntry.componentInstance.$set({ params });
+			resumableEntry.pathname = pathname;
+		}
+	} else {
+		const mountPoint = document.createElement('div');
+
+		editableEntryConfig = {
+			resumable: config.defaultResumable,
+		};
+		entry = {
+			component: config.routes[routeKey],
+			componentInstance: new config.routes[routeKey]({ target: mountPoint, props: { params } }),
+			mountPoint,
+			pathname,
+			routeMatch: routeKey,
+			entryConfig: editableEntryConfig,
+		};
+	}
+
+	await tick();
+
+	editableEntryConfig = null;
+
+	return entry;
+}
+
+let activeCacheEntry: CacheEntry | null = null;
+async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
+	const currentCache: CacheEntry[] = get(internalCache);
+
+	const isNewHistoryItem = !historyItem.state;
+	if (isNewHistoryItem) {
+		historyItem.state = {
+			timestamp: new Date().getTime(),
+		};
+		await waitForHistoryState(() => window.history.replaceState(historyItem.state, '', (config.useHash ? '#' : '') + historyItem.location));
+	}
+
+	const cacheEntryToLoad = await prepareCacheEntryToActivate(currentCache, getPathname(historyItem.location));
+	if (!cacheEntryToLoad) {
+		console.error('no route found');
+	} else {
+		const cacheEntryToUnload = activeCacheEntry;
+		const newTopIndexInCurrentStack = currentCache.findIndex((s) => s.routeMatch === cacheEntryToLoad.routeMatch);
+
+		let cacheEntryToLoadAction = LoadableEntryAction.NoOp;
+		let cacheEntryToUnloadAction = UnloadableEntryAction.NoOp;
+		let navigationType: NavigationType = NavigationType.GoForwardNewState;
+
+		if (!cacheEntryToUnload) {
+			cacheEntryToLoadAction = LoadableEntryAction.New;
+		} else {
+			if (cacheEntryToUnload.routeMatch !== cacheEntryToLoad.routeMatch) {
+				if (newTopIndexInCurrentStack !== -1) {
+					cacheEntryToLoadAction = LoadableEntryAction.Resume;
+				} else {
+					cacheEntryToLoadAction = LoadableEntryAction.New;
+				}
+				if (cacheEntryToUnload.entryConfig.resumable) {
+					cacheEntryToUnloadAction = UnloadableEntryAction.Pause;
+				} else {
+					cacheEntryToUnloadAction = UnloadableEntryAction.Destroy;
+				}
+			}
+
+			if (isNewHistoryItem) {
+				navigationType = NavigationType.GoForwardNewState;
+			} else if (historyItem.state.timestamp > lastHistoryTimestamp) {
+				navigationType = NavigationType.GoForwardResumeState;
+			} else if (historyItem.state.timestamp < lastHistoryTimestamp) {
+				navigationType = NavigationType.GoBackward;
+			} else {
+				navigationType = NavigationType.Replace;
+			}
+		}
+
+		// BEFORE TRANSITION
+		async function beforeUnload() {
+			if (
+				cacheEntryToUnload
+				&& cacheEntryToUnloadAction !== UnloadableEntryAction.NoOp
+				&& cacheEntryToUnload.entryConfig.onBeforeUnload
+				&& cacheEntryToUnload.entryConfig.onBeforeUnload.length > 0
+			) {
+				for (const callback of cacheEntryToUnload.entryConfig.onBeforeUnload) {
+					await callback();
+				}
+			}
+		}
+
+		async function beforeLoad() {
+			if (
+				cacheEntryToLoad
+				&& cacheEntryToLoadAction !== LoadableEntryAction.NoOp
+				&& cacheEntryToLoad.entryConfig.onBeforeLoad
+				&& cacheEntryToLoad.entryConfig.onBeforeLoad.length > 0
+			) {
+				for (const callback of cacheEntryToLoad.entryConfig.onBeforeLoad) {
+					await callback();
+				}
+			}
+		}
+
+		await Promise.all([beforeUnload(), beforeLoad()]);
+
+		// DURING TRANSITION
+		async function pause() {
+			if (
+				cacheEntryToUnload
+				&& cacheEntryToUnloadAction === UnloadableEntryAction.Pause
+				&& cacheEntryToUnload.entryConfig.onPause
+				&& cacheEntryToUnload.entryConfig.onPause.length > 0
+			) {
+				for (const callback of cacheEntryToUnload.entryConfig.onPause) {
+					await callback();
+				}
+			}
+		}
+
+		async function resume() {
+			if (cacheEntryToLoad && cacheEntryToLoadAction === LoadableEntryAction.Resume) {
+				const { returnValue } = historyItem.state || {};
+				await waitForHistoryState(() => {
+					// Remove returnValue and scroll
+					window.history.replaceState(
+						{
+							timestamp: historyItem.state.timestamp,
+						} as HistoryState,
+						'',
+						(config.useHash ? '#' : '') + historyItem.location,
+					);
+				});
+				if (cacheEntryToLoad.entryConfig.onResume && cacheEntryToLoad.entryConfig.onResume.length > 0) {
+					for (const callback of cacheEntryToLoad.entryConfig.onResume) {
+						await callback(returnValue);
+					}
+				}
+			}
+		}
+
+		const oldTopMountPoint = cacheEntryToUnload ? cacheEntryToUnload.mountPoint : null;
+		const newTopMountPoint = cacheEntryToLoad.mountPoint;
+
+		if (oldTopMountPoint !== newTopMountPoint) {
+			async function transition() {
+				if (config.mountPoint) {
+					if (!newTopMountPoint.parentElement) {
+						config.mountPoint.appendChild(newTopMountPoint);
+					}
+
+					await config.transitionFn({
+						navigationType,
+						routerMountPoint: config.mountPoint,
+						mountPointToLoad: newTopMountPoint,
+						mountPointToUnload: oldTopMountPoint,
+						scroll: historyItem.state.scroll || { x: 0, y: 0 },
+					});
+
+					if (oldTopMountPoint) {
+						config.mountPoint.removeChild(oldTopMountPoint);
+					}
+				}
+			}
+
+			await Promise.all([
+				transition(),
+				pause(),
+				resume(),
+			]);
+		}
+
+		// AFTER TRANSITION
+		async function afterLoad() {
+			if (
+				cacheEntryToLoad
+				&& cacheEntryToLoadAction !== LoadableEntryAction.NoOp
+				&& cacheEntryToLoad.entryConfig.onAfterLoad
+				&& cacheEntryToLoad.entryConfig.onAfterLoad.length > 0
+			) {
+				for (const callback of cacheEntryToLoad.entryConfig.onAfterLoad) {
+					await callback();
+				}
+			}
+		}
+
+		async function afterUnload() {
+			if (
+				cacheEntryToUnload
+				&& cacheEntryToUnloadAction !== UnloadableEntryAction.NoOp
+				&& cacheEntryToUnload.entryConfig.onAfterUnload
+				&& cacheEntryToUnload.entryConfig.onAfterUnload.length > 0
+			) {
+				for (const callback of cacheEntryToUnload.entryConfig.onAfterUnload) {
+					await callback();
+				}
+			}
+		}
+
+		await Promise.all([afterLoad(), afterUnload()]);
+
+		if (cacheEntryToLoadAction === LoadableEntryAction.New) {
+			currentCache.push(cacheEntryToLoad);
+		}
+		if (cacheEntryToUnload && cacheEntryToUnloadAction === UnloadableEntryAction.Destroy) {
+			cacheEntryToUnload.componentInstance.$destroy();
+			currentCache.splice(currentCache.indexOf(cacheEntryToUnload), 1);
+		}
+		internalCache.set(currentCache);
+		activeCacheEntry = cacheEntryToLoad;
+
+		lastHistoryTimestamp = historyItem.state.timestamp;
+	}
+}
+
+/* API FUNCTIONS */
+/**
+ * Replaces the current history location and state
+ * @param location new location
+ * @param state new history state
+ */
 export async function replace(location: string, state?: HistoryState): Promise<void> {
 	await waitForHistoryState(() => {
-		window.history.replaceState(
-			state || {
-				timestamp: lastHistoryTimestamp,
-			},
-			'',
-			(config.useHash ? '#' : '') + location,
-		);
+		window.history.replaceState({
+			...(state || {}),
+			timestamp: lastHistoryTimestamp,
+		},
+		'',
+		(config.useHash ? '#' : '') + location);
 	});
 
 	dispatchCustomEvent(window as any, 'popstate');
 }
 
+/**
+ * Navigates to a new location
+ * If scroll restoration is enabled, the current window scroll position is persisted before leaving the current location
+ * If the new location equals the current one, this function won't modify the browser history
+ * @param location new location
+ */
 export async function push(location: string): Promise<void> {
+	if (location === getLocation()) {
+		return;
+	}
+
 	if (config.restoreScroll) {
 		await waitForHistoryState(() => {
 			window.history.replaceState({
 				timestamp: window.history.state ? window.history.state.timestamp : new Date().getTime(),
+				scroll: {
+					x: window.scrollY,
+					y: window.scrollY,
+				},
 			}, '', (config.useHash ? '#' : '') + getLocation());
 		});
 	}
@@ -474,8 +480,12 @@ export async function push(location: string): Promise<void> {
 	dispatchCustomEvent(window as any, 'popstate');
 }
 
+/**
+ * Navigates back
+ * @param returnValue a serializable object that will be returned to the component associated with the previous location if resumable
+ */
 export async function pop(returnValue?: any): Promise<void> {
-	config.inhibitLocationStoreUpdate = true;
+	ignorePopStateEvent = true;
 	await waitForHistoryState(() => window.history.back());
 	await waitForHistoryState(() => {
 		window.history.replaceState(
@@ -487,10 +497,16 @@ export async function pop(returnValue?: any): Promise<void> {
 			(config.useHash ? '#' : '') + getLocation(),
 		);
 	});
-	config.inhibitLocationStoreUpdate = false;
+	ignorePopStateEvent = false;
 	dispatchCustomEvent(window as any, 'popstate');
 }
 
+/**
+ * Svelte action that can be associated with an HTMLAnchorElement (`<a>`) to automatically prefix '#' when using client side navigation only
+ * @param node the HTML anchor tag
+ * @param href the href attribute of the anchor tag
+ * @returns an object containing the callback Svelte will use to trigger updates
+ */
 export function link(node: HTMLAnchorElement, href?: string): { update: Function } {
 	if (!node || !node.tagName || node.tagName.toLowerCase() !== 'a') {
 		throw new Error('not a <a> tag');
@@ -500,7 +516,7 @@ export function link(node: HTMLAnchorElement, href?: string): { update: Function
 		if (!e.ctrlKey) {
 			e.preventDefault();
 			// for an unknown reason, pushing the state blocks any on:click handler attached in a Svelte file.
-			// This sleep let the event propagate and schedule the push call after the bubbling has finished
+			// This sleep lets the event propagate and schedules the push call after the bubbling has finished
 			await sleep(1);
 			push(config.useHash ? node.getAttribute('href')!.substring(1) : node.getAttribute('href')!);
 		}
@@ -525,60 +541,136 @@ export function link(node: HTMLAnchorElement, href?: string): { update: Function
 	};
 }
 
-/** COMPONENT LIFECYCLE */
+/* COMPONENT LIFECYCLE */
+const lifecycleErrorText = 'lifecycle functions can only be'
+	+ ' called while initializing or before preparing a component to resume (i.e. with a reactive statement on "params")';
+
+/**
+ * Attaches a callback to the resume lifecycle phase.
+ * Lifecycle summary (|| = semi-parallel execution, achieved with Promise.all):
+ * - create the page component if not in cache
+ * - before-unload previous component || before-load new component
+ * - pause previous component if resumable || resume new component if in cache || animate-transition
+ * - after-unload previous component || after-load new component
+ * - destroy previous component if not resumable
+ * @param callback function that will be called when the component is resumed
+ */
 export function onResume(callback: () => any): void {
-	const stackEntries: StackEntry[] = get(stack);
-	const stackEntry = stackTop(stackEntries);
-	if (!stackEntry) {
-		return;
+	if (!editableEntryConfig) {
+		throw new Error(lifecycleErrorText);
 	}
-	if (!stackEntry.onResume) {
-		stackEntry.onResume = [];
+	if (!editableEntryConfig.onResume) {
+		editableEntryConfig.onResume = [];
 	}
-	stackEntry.onResume.push(callback);
+	editableEntryConfig.onResume.push(callback);
 }
 
+/**
+ * Attaches a callback to the pause lifecycle phase.
+ * Lifecycle summary (|| = semi-parallel execution, achieved with Promise.all):
+ * - create the page component if not in cache
+ * - before-unload previous component || before-load new component
+ * - pause previous component if resumable || resume new component if in cache || animate-transition
+ * - after-unload previous component || after-load new component
+ * - destroy previous component if not resumable
+ * @param callback function that will be called when the component is paused
+ */
 export function onPause(callback: () => any): void {
-	const stackEntries: StackEntry[] = get(stack);
-	const stackEntry = stackTop(stackEntries);
-	if (!stackEntry) {
-		return;
+	if (!editableEntryConfig) {
+		throw new Error(lifecycleErrorText);
 	}
-	if (!stackEntry.onPause) {
-		stackEntry.onPause = [];
+	if (!editableEntryConfig.onPause) {
+		editableEntryConfig.onPause = [];
 	}
-	stackEntry.onPause.push(callback);
+	editableEntryConfig.onPause.push(callback);
 }
 
+/**
+ * Attaches a callback to the before-unload lifecycle phase.
+ * Lifecycle summary (|| = semi-parallel execution, achieved with Promise.all):
+ * - create the page component if not in cache
+ * - before-unload previous component || before-load new component
+ * - pause previous component if resumable || resume new component if in cache || animate-transition
+ * - after-unload previous component || after-load new component
+ * - destroy previous component if not resumable
+ * @param callback function that will be called when the component is being prepared for unloading
+ */
 export function onBeforeUnload(callback: () => any): void {
-	const stackEntries: StackEntry[] = get(stack);
-	const stackEntry = stackTop(stackEntries);
-	if (!stackEntry) {
-		return;
+	if (!editableEntryConfig) {
+		throw new Error(lifecycleErrorText);
 	}
-	if (!stackEntry.onBeforeUnload) {
-		stackEntry.onBeforeUnload = [];
+	if (!editableEntryConfig.onBeforeUnload) {
+		editableEntryConfig.onBeforeUnload = [];
 	}
-	stackEntry.onBeforeUnload.push(callback);
+	editableEntryConfig.onBeforeUnload.push(callback);
 }
 
+/**
+ * Lifecycle summary (|| = semi-parallel execution, achieved with Promise.all):
+ * - create the page component if not in cache
+ * - before-unload previous component || before-load new component
+ * - pause previous component if resumable || resume new component if in cache || animate-transition
+ * - after-unload previous component || after-load new component
+ * - destroy previous component if not resumable
+ * @param callback function that will be called when the component has finished loading
+ */
 export function onAfterLoad(callback: () => any): void {
-	const stackEntries: StackEntry[] = get(stack);
-	const stackEntry = stackTop(stackEntries);
-	if (!stackEntry) {
-		return;
+	if (!editableEntryConfig) {
+		throw new Error(lifecycleErrorText);
 	}
-	if (!stackEntry.onAfterLoad) {
-		stackEntry.onAfterLoad = [];
+	if (!editableEntryConfig.onAfterLoad) {
+		editableEntryConfig.onAfterLoad = [];
 	}
-	stackEntry.onAfterLoad.push(callback);
+	editableEntryConfig.onAfterLoad.push(callback);
 }
 
-export function setResumable(resumable: boolean): void {
-	const stackEntries: StackEntry[] = get(stack);
-	const stackEntry = stackTop(stackEntries);
-	if (!stackEntry) {
-		return;
+/**
+ * Attaches a callback to the after-unload lifecycle phase.
+ * Lifecycle summary (|| = semi-parallel execution, achieved with Promise.all):
+ * - create the page component if not in cache
+ * - before-unload previous component || before-load new component
+ * - pause previous component if resumable || resume new component if in cache || animate-transition
+ * - after-unload previous component || after-load new component
+ * - destroy previous component if not resumable
+ * @param callback function that will be called when the component has finished unloading
+ */
+export function onAfterUnload(callback: () => any): void {
+	if (!editableEntryConfig) {
+		throw new Error(lifecycleErrorText);
 	}
-	stackEntry.resumable = resumable;
+	if (!editableEntryConfig.onAfterUnload) {
+		editableEntryConfig.onAfterUnload = [];
+	}
+	editableEntryConfig.onAfterUnload.push(callback);
+}
+
+/**
+ * Attaches a callback to the before-load lifecycle phase.
+ * Lifecycle summary (|| = semi-parallel execution, achieved with Promise.all):
+ * - create the page component if not in cache
+ * - before-unload previous component || before-load new component
+ * - pause previous component if resumable || resume new component if in cache || animate-transition
+ * - after-unload previous component || after-load new component
+ * - destroy previous component if not resumable
+ * @param callback function that will be called when the component is being prepared for loading
+ */
+export function onBeforeLoad(callback: () => any): void {
+	if (!editableEntryConfig) {
+		throw new Error(lifecycleErrorText);
+	}
+	if (!editableEntryConfig.onBeforeLoad) {
+		editableEntryConfig.onBeforeLoad = [];
+	}
+	editableEntryConfig.onBeforeLoad.push(callback);
+}
+
+/**
+ * Determines whether the component will be paused or destroyed
+ * @param resumable whether the component should be paused and resumed or completely destroyed and recreated
+ */
+export function setResumable(resumable: boolean): void {
+	if (!editableEntryConfig) {
+		throw new Error(lifecycleErrorText);
+	}
+	editableEntryConfig.resumable = resumable;
 }

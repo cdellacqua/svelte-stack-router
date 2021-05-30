@@ -1,6 +1,11 @@
 <script>
 	import { onMount, onDestroy } from "svelte";
-	import { onPause, onResume, pathname, link } from "../stack-router";
+	import { onPause, onResume, pathname, onBeforeUnload } from "../stack-router";
+	import Links from "../components/Links.svelte";
+
+	export let params = {
+		something: null,
+	};
 
 	let status = [];
 	onMount(() => {
@@ -21,9 +26,8 @@
 	<h2>Current path: {$pathname}</h2>
 </div>
 <div style="text-align: center">
-	<h1>Not found</h1>
+	<h1>Example Page 4, <code>something</code> param: {params.something}</h1>
 </div>
-<a use:link href="/redirect">Redirect</a>
-<br />
+<Links />
 <div>Events:</div>
 {@html status.join("<br />")}
