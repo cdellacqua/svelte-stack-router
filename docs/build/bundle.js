@@ -2040,7 +2040,7 @@ var StackRouter = (function () {
     	return child_ctx;
     }
 
-    // (47:2) {#each events as event}
+    // (55:2) {#each events as event}
     function create_each_block$1(ctx) {
     	let li;
     	let t0_value = /*event*/ ctx[1] + "";
@@ -2149,6 +2149,7 @@ var StackRouter = (function () {
 
     function instance$2($$self, $$props, $$invalidate) {
     	let events = [];
+    	setResumable(false);
 
     	// Example of a non-resumable component lifecycle
     	onMount(() => {
