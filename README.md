@@ -11,18 +11,32 @@ You can clone this repo, run `npm i` and `npm run dev` to try it out
 
 - open/create the component that will contain the StackRouter
 - define your routes as key-value pairs, like in the following example
-	```svelte
+	```javascript
 	let myRoutes = {
 		"/": Home,
 		"/my-page": PageComponent,
 		"/my-other-page/:someString": OtherPageThatAcceptsAParameter,
 		"/my-other-page2/:optionalParam?": OtherPageThatAcceptsAnOptionalParameter,
-		"*": "NotFound",
+		"*": NotFound,
 	};
 	```
 - import the StackRouter component
 - add `<StackRouter routes={myRoutes} />` somewhere in the HTML section
 
+Example:
+```svelte
+<script>
+	import { StackRouter } from 'svelte-stack-router';
+	import Home from './Home.svelte';
+	import NotFound from './NotFound.svelte';
+
+	let routes = {
+		"/": Home,
+		"*": NotFound
+	};
+</script>
+<StackRouter {routes} />
+```
 
 ## How it works
 
