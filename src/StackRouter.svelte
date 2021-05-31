@@ -51,9 +51,3 @@
 </script>
 
 <div class="stack-router-mount-point" bind:this={mountPoint} />
-
-<style>
-	.stack-router-mount-point {
-		position: relative;
-	}
-</style>
