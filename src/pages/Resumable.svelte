@@ -102,7 +102,7 @@
 </div>
 <div style="padding-top: 10px">Events so far:</div>
 <div>
-	<ul>
+	<ul style="display: inline-block">
 		{#each events as event}
 			<li>
 				{event}
