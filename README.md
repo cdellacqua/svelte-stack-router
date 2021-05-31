@@ -2,17 +2,23 @@
 
 Bridging the gap between Native Apps and WebApps. A Stack-based Svelte Router that will make your WebApp feel more native
 
-## Working demo
-* [App.svelte](https://github.com/cdellacqua/svelte-stack-router/blob/master/src/App.svelte)
+[NPM Package](https://www.npmjs.com/package/svelte-stack-router)
 
-You can clone this repo, run `npm i` and `npm run dev` to try it out
+`npm install --save-dev svelte-stack-router`
+
+## Working demo
+
+[svelte-stack-router demo](https://cdellacqua.github.io/svelte-stack-router/#/)
+
+The demo files can be found in [src/](https://github.com/cdellacqua/svelte-stack-router/blob/master/src/)
 
 ## Quick setup
 
+- install this package `npm install --save-dev svelte-stack-router`
 - open/create the component that will contain the StackRouter
 - define your routes as key-value pairs, like in the following example
 	```javascript
-	let myRoutes = {
+	const myRoutes = {
 		"/": Home,
 		"/my-page": PageComponent,
 		"/my-other-page/:someString": OtherPageThatAcceptsAParameter,
@@ -24,13 +30,15 @@ You can clone this repo, run `npm i` and `npm run dev` to try it out
 - add `<StackRouter routes={myRoutes} />` somewhere in the HTML section
 
 Example:
+
+`App.svlete`
 ```svelte
 <script>
 	import { StackRouter } from 'svelte-stack-router';
 	import Home from './Home.svelte';
 	import NotFound from './NotFound.svelte';
 
-	let routes = {
+	const routes = {
 		"/": Home,
 		"*": NotFound
 	};
