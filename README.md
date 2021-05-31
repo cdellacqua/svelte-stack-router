@@ -50,7 +50,9 @@ Example:
 
 Page components are cached, this ensures that going back in the browser history resumes the complete previous state.
 
-In other words: **previously instantiated pages don't get destroyed by default, they just get paused and resumed to reduce re-renders and preserve their full state**
+In other words: **previously instantiated pages don't get destroyed by default, they just get paused and resumed to reduce re-renders and preserve their full state**.
+
+Note that **a cached page is uniquely identified by its route template** (i.e. the key in the `routes/myRoutes` objects in the examples above), *not by the component*.
 
 ## Enhanced lifecycle functions
 
