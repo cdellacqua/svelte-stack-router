@@ -10,6 +10,7 @@
 	<a use:link href="/resumable">Go to Resumable</a>
 	<a use:link href="/resumable/here you go!">Go to Resumable with parameter</a>
 	<a use:link href="/throwaway">Go to Throwaway</a>
+	<a use:link href="/unregistered-route">Go to 404</a>
 	{#if historyLength > 2}
 		<button on:click={() => pop("bye!")}
 			>Go back passing a returnValue</button
