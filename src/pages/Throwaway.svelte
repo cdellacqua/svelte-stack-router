@@ -7,9 +7,12 @@
 		onAfterLoad,
 		onAfterUnload,
 		onBeforeLoad,
+		setResumable,
 	} from "../.";
 
 	let events = [];
+
+	setResumable(false);
 
 	// Example of a non-resumable component lifecycle
 	onMount(() => {
@@ -18,8 +21,12 @@
 	onBeforeLoad(() => {
 		events = [...events, "onBeforeLoad"];
 	});
-	onResume((retVal) => { // This won't get called
-		events = [...events, "onResume" + (retVal ? `, received: "${retVal}"` : "")]; // will not be executed
+	onResume((retVal) => {
+		// This won't get called
+		events = [
+			...events,
+			"onResume" + (retVal ? `, received: "${retVal}"` : ""),
+		]; // will not be executed
 	});
 	onAfterLoad(() => {
 		events = [...events, "onAfterLoad"];
@@ -27,7 +34,8 @@
 	onBeforeUnload(() => {
 		events = [...events, "onBeforeUnload"];
 	});
-	onPause(() => { // This won't get called
+	onPause(() => {
+		// This won't get called
 		events = [...events, "onPause"];
 	});
 	onAfterUnload(() => {
