@@ -10,8 +10,9 @@
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"build": "tsc && rimraf dist && rollup -c && tsc -d --emitDeclarationOnly --declarationDir dist && cp src/index.d.ts dist/index.d.ts",
 		"prepublishOnly": "npm run build",
-		"start": "sirv public --host",
-		"dev": "npm run build && rollup --config rollup.preview.config.js -w"
+		"start": "sirv docs --host",
+		"dev": "npm run build && rollup --config rollup.preview.config.js -w",
+		"build:preview": "npm run build && rollup --config rollup.preview.config.js"
 	},
 	"keywords": [
 		"spa",
