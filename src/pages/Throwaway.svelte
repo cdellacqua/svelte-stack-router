@@ -49,9 +49,16 @@
 <div style="text-align: center">
 	<h1>I'm a non-resumable component</h1>
 </div>
-<div>Events so far:</div>
+<div style="padding-top: 10px">
+	<p>
+		This component <strong>won't</strong> get cached. As a result the following video
+		will restart every time you visit this page
+	</p>
+	<video src="bunny.mp4" autoplay muted controls />
+</div>
+<div style="padding-top: 10px">Events so far:</div>
 <div>
-	<ul style="display: inline-block">
+	<ul style="display: inline-block; margin: 0; text-align: left">
 		{#each events as event}
 			<li>
 				{event}

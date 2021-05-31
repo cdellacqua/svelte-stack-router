@@ -16,7 +16,11 @@
 
 	let events = [];
 
-	let wait1s = true;
+	let wait1s = false;
+
+	/** @type {HTMLVideoElement} */
+	let videoRef;
+	let videoWasPlaying = true;
 
 	// Example of a resumable component lifecycle
 	onMount(() => {
@@ -32,21 +36,34 @@
 		];
 	});
 	onAfterLoad(() => {
-		events = [...events, "onAfterLoad"];
+		if (videoWasPlaying) {
+			events = [...events, "onAfterLoad, resuming video"];
+			videoRef?.play();
+		} else {
+			events = [...events, "onAfterLoad"];
+		}
 	});
 	onBeforeUnload(() => {
-		if (!wait1s) {
+		if (wait1s) {
+			events = [
+				...events,
+				"onBeforeUnload. I'll just wait 1s before letting the router unload me",
+			];
+			return new Promise((res) => setTimeout(res, 1000));
+		} else {
 			events = [...events, "onBeforeUnload"];
-			return;
 		}
-		events = [
-			...events,
-			"onBeforeUnload, i'll just wait 1s before letting the router unload me",
-		];
-		return new Promise((res) => setTimeout(res, 1000));
 	});
 	onPause(() => {
-		events = [...events, "onPause"];
+		let message = "onPause";
+		if (videoRef && !videoRef.paused) {
+			message += ", pausing video";
+			videoRef.pause();
+			videoWasPlaying = true;
+		} else {
+			videoWasPlaying = false;
+		}
+		events = [...events, message];
 	});
 	onAfterUnload(() => {
 		events = [...events, "onAfterUnload"];
@@ -55,7 +72,7 @@
 		// This won't get called
 		events = [...events, "onDestroy"];
 	});
-	
+
 	let firstRun = true;
 	function onParamsChange() {
 		if (firstRun) {
@@ -100,9 +117,16 @@
 		</p>
 	{/if}
 </div>
+<div style="padding-top: 10px">
+	<p>
+		This component <strong>will</strong> get cached. As a result the following video
+		will be paused and resumed every time you visit this page
+	</p>
+	<video bind:this={videoRef} src="bunny.mp4" autoplay muted controls />
+</div>
 <div style="padding-top: 10px">Events so far:</div>
 <div>
-	<ul style="display: inline-block">
+	<ul style="display: inline-block; margin: 0; text-align: left">
 		{#each events as event}
 			<li>
 				{event}
