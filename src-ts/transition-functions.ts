@@ -21,9 +21,13 @@ export function commonTransitionGenerator(
 		const styleBefore = styleBeforeGenerator(loadClass, unloadClass, routerClass, transitionFunctionData);
 		const styleDuring = styleDuringGenerator(loadClass, unloadClass, routerClass, transitionFunctionData);
 
-		transitionFunctionData.mountPointToUnload?.classList.add(unloadClass);
-		transitionFunctionData.mountPointToLoad.classList.add(loadClass);
-		transitionFunctionData.routerMountPoint.classList.add(routerClass);
+		const {
+			mountPointToUnload, mountPointToLoad, scroll, routerMountPoint,
+		} = transitionFunctionData;
+
+		mountPointToUnload?.classList.add(unloadClass);
+		mountPointToLoad.classList.add(loadClass);
+		routerMountPoint.classList.add(routerClass);
 
 		document.head.appendChild(styleBefore);
 		await animationFrame();
@@ -33,17 +37,17 @@ export function commonTransitionGenerator(
 
 		await sleep(duration);
 
-		window.scrollTo(transitionFunctionData.scroll.x, transitionFunctionData.scroll.y);
+		window.scrollTo(scroll.x, scroll.y);
 		if (window.getComputedStyle(document.documentElement).scrollBehavior === 'smooth') {
 			// At the moment of writing this comment there is no official/simple way to wait for the
 			// window.scrollTo method to complete the animation
-			// Hack: loop for a maximum of 500ms checking if the scroll position is close enough to the target transitionFunctionData.scroll
+			// Hack: loop for a maximum of 500ms checking if the scroll position is close enough to the target scroll
 			const threshold = 5;
 			for (let i = 0; i < 50; i++) {
 				if (
 					Math.sqrt(
-						Math.pow(window.scrollX - transitionFunctionData.scroll.x, 2)
-						+ Math.pow(window.scrollY - transitionFunctionData.scroll.y, 2),
+						Math.pow(window.scrollX - scroll.x, 2)
+						+ Math.pow(window.scrollY - scroll.y, 2),
 					) < threshold
 				) {
 					break;
@@ -55,16 +59,18 @@ export function commonTransitionGenerator(
 		document.head.removeChild(styleBefore);
 		document.head.removeChild(styleDuring);
 
-		transitionFunctionData.mountPointToUnload?.classList.remove(unloadClass);
-		transitionFunctionData.mountPointToLoad.classList.remove(loadClass);
-		transitionFunctionData.routerMountPoint.classList.remove(routerClass);
+		mountPointToUnload?.classList.remove(unloadClass);
+		mountPointToLoad.classList.remove(loadClass);
+		routerMountPoint.classList.remove(routerClass);
 	};
 }
 
 export function slide(duration: number): TransitionFunction {
 	return commonTransitionGenerator(
 		duration,
-		(loadClass, unloadClass, routerClass, transitionFunctionData) => makeStyleTag(`
+		(loadClass, unloadClass, routerClass, {
+			navigationType, routerMountPoint,
+		}) => makeStyleTag(`
 			html {
 				scroll-behavior: smooth;
 			}
@@ -75,7 +81,7 @@ export function slide(duration: number): TransitionFunction {
 				top: 0;
 				right: 0;
 				opacity: 0;
-				transform: translateX(${transitionFunctionData.navigationType === NavigationType.GoBackward ? '-' : ''}50%);
+				transform: translateX(${navigationType === NavigationType.GoBackward ? '-' : ''}50%);
 			}
 			.${unloadClass} {
 				position: relative;
@@ -85,11 +91,12 @@ export function slide(duration: number): TransitionFunction {
 			}
 			.${routerClass} {
 				position: relative;
-				min-height: ${transitionFunctionData.routerMountPoint.offsetHeight}px;
-				min-width: ${transitionFunctionData.routerMountPoint.offsetWidth}px;
+				overflow: hidden;
+				min-height: ${routerMountPoint.offsetHeight}px;
+				min-width: ${routerMountPoint.offsetWidth}px;
 			}
 		`),
-		(loadClass, unloadClass, _, transitionFunctionData) => makeStyleTag(`
+		(loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
 			.${loadClass} {
 				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
 				opacity: 1;
@@ -98,7 +105,7 @@ export function slide(duration: number): TransitionFunction {
 			.${unloadClass} {
 				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
 				opacity: 0;
-				transform: translateX(${transitionFunctionData.navigationType === NavigationType.GoBackward ? '' : '-'}50%);
+				transform: translateX(${navigationType === NavigationType.GoBackward ? '' : '-'}50%);
 			}
 		`),
 	);
@@ -107,7 +114,7 @@ export function slide(duration: number): TransitionFunction {
 export function dive(duration: number): TransitionFunction {
 	return commonTransitionGenerator(
 		duration,
-		(loadClass, unloadClass, routerClass, transitionFunctionData) => makeStyleTag(`
+		(loadClass, unloadClass, routerClass, { navigationType, routerMountPoint }) => makeStyleTag(`
 			html {
 				scroll-behavior: smooth;
 			}
@@ -118,7 +125,7 @@ export function dive(duration: number): TransitionFunction {
 				top: 0;
 				right: 0;
 				opacity: 0;
-				transform: translateZ(${transitionFunctionData.navigationType === NavigationType.GoBackward ? '' : '-'}150px);
+				transform: translateZ(${navigationType === NavigationType.GoBackward ? '' : '-'}150px);
 			}
 			.${unloadClass} {
 				position: relative;
@@ -130,12 +137,12 @@ export function dive(duration: number): TransitionFunction {
 				perspective: 1200px;
 				perspective-origin: top center;
 				position: relative;
-				min-height: ${transitionFunctionData.routerMountPoint.offsetHeight}px;
-				min-width: ${transitionFunctionData.routerMountPoint.offsetWidth}px;
-				background: 
+				overflow: hidden;
+				min-height: ${routerMountPoint.offsetHeight}px;
+				min-width: ${routerMountPoint.offsetWidth}px;
 			}
 		`),
-		(loadClass, unloadClass, _, transitionFunctionData) => makeStyleTag(`
+		(loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
 			.${loadClass} {
 				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
 				opacity: 1;
@@ -144,7 +151,7 @@ export function dive(duration: number): TransitionFunction {
 			.${unloadClass} {
 				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
 				opacity: 0;
-				transform: translateZ(${transitionFunctionData.navigationType === NavigationType.GoBackward ? '-' : ''}150px);
+				transform: translateZ(${navigationType === NavigationType.GoBackward ? '-' : ''}150px);
 			}
 		`),
 	);
