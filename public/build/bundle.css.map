@@ -1,0 +1,16 @@
+{
+  "version": 3,
+  "file": "bundle.css",
+  "sources": [
+    "App.svelte",
+    "StackRouter.svelte",
+    "_Layout.svelte"
+  ],
+  "sourcesContent": [
+    "<script>\n\timport { init as initRouter, cache } from \"./stack-router\";\n\timport StackRouter from \"./StackRouter.svelte\";\n\timport routes from \"./_routes\";\n\n\t$: console.log($cache.map((entry) => entry.component.name));\n\n\tinitRouter(routes);\n</script>\n\n<style>\n\t:global(html, body) {\n\t\tfont-family: sans-serif;\n\t\tmargin: 0;\n\t\tpadding: 0;\n\t}\n\t:global(*) {\n\t\tbox-sizing: border-box;\n\t}\n\t:global(h1, h2, h3, h4, h5, h6) {\n\t\tmargin: 0;\n\t}\n</style>\n\n<StackRouter />\n",
+    "<script>\n\timport { onDestroy, onMount } from \"svelte\";\n\n\timport {\n\t\thandleStackRouterComponentMount,\n\t\thandleStackRouterComponentDestroy,\n\t} from \"./stack-router\";\n\n\tlet mountPoint;\n\tonMount(() => {\n\t\thandleStackRouterComponentMount(mountPoint);\n\t});\n\tonDestroy(() => {\n\t\thandleStackRouterComponentDestroy()\n\t});\n</script>\n\n<style>\n\t.stack-router-mount-point {\n\t\tposition: relative;\n\t}\n</style>\n\n<div class=\"stack-router-mount-point\" bind:this={mountPoint}></div>",
+    "<script>\n\timport { init as initRouter, cache } from \"../stack-router\";\n\timport StackRouter from \"../StackRouter.svelte\";\n\timport routes from \"../_routes\";\n\n\t$: console.log($cache.map((entry) => entry.component.name));\n\n\tinitRouter(routes);\n</script>\n\n<style>\n\t:global(html, body) {\n\t\tfont-family: sans-serif;\n\t\tmargin: 0;\n\t\tpadding: 0;\n\t}\n\t:global(*) {\n\t\tbox-sizing: border-box;\n\t}\n\t:global(h1, h2, h3, h4, h5, h6) {\n\t\tmargin: 0;\n\t}\n</style>\n\n<StackRouter />\n"
+  ],
+  "names": [],
+  "mappings": "AAWS,UAAU,AAAE,CAAC,AACpB,WAAW,CAAE,UAAU,CACvB,MAAM,CAAE,CAAC,CACT,OAAO,CAAE,CAAC,AACX,CAAC,AACO,CAAC,AAAE,CAAC,AACX,UAAU,CAAE,UAAU,AACvB,CAAC,AACO,sBAAsB,AAAE,CAAC,AAChC,MAAM,CAAE,CAAC,AACV,CAAC;ACHD,yBAAyB,eAAC,CAAC,AAC1B,QAAQ,CAAE,QAAQ,AACnB,CAAC;ACTO,UAAU,AAAE,CAAC,AACpB,WAAW,CAAE,UAAU,CACvB,MAAM,CAAE,CAAC,CACT,OAAO,CAAE,CAAC,AACX,CAAC,AACO,CAAC,AAAE,CAAC,AACX,UAAU,CAAE,UAAU,AACvB,CAAC,AACO,sBAAsB,AAAE,CAAC,AAChC,MAAM,CAAE,CAAC,AACV,CAAC"
+}
