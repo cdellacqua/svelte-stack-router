@@ -2334,6 +2334,9 @@ var StackRouter = (function () {
     	let a3;
     	let link_action_3;
     	let t7;
+    	let a4;
+    	let link_action_4;
+    	let t9;
     	let mounted;
     	let dispose;
     	let if_block = /*historyLength*/ ctx[0] > 2 && create_if_block$1(ctx);
@@ -2353,11 +2356,15 @@ var StackRouter = (function () {
     			a3 = element("a");
     			a3.textContent = "Go to Throwaway";
     			t7 = space();
+    			a4 = element("a");
+    			a4.textContent = "Go to 404";
+    			t9 = space();
     			if (if_block) if_block.c();
     			attr(a0, "href", "/");
     			attr(a1, "href", "/resumable");
     			attr(a2, "href", "/resumable/here you go!");
     			attr(a3, "href", "/throwaway");
+    			attr(a4, "href", "/unregistered-route");
     			set_style(div, "text-align", "center");
     			set_style(div, "margin-bottom", "20px");
     		},
@@ -2371,6 +2378,8 @@ var StackRouter = (function () {
     			append(div, t5);
     			append(div, a3);
     			append(div, t7);
+    			append(div, a4);
+    			append(div, t9);
     			if (if_block) if_block.m(div, null);
 
     			if (!mounted) {
@@ -2378,7 +2387,8 @@ var StackRouter = (function () {
     					action_destroyer(link_action = link.call(null, a0)),
     					action_destroyer(link_action_1 = link.call(null, a1)),
     					action_destroyer(link_action_2 = link.call(null, a2)),
-    					action_destroyer(link_action_3 = link.call(null, a3))
+    					action_destroyer(link_action_3 = link.call(null, a3)),
+    					action_destroyer(link_action_4 = link.call(null, a4))
     				];
 
     				mounted = true;
