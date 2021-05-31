@@ -1680,11 +1680,11 @@ var StackRouter = (function () {
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[8] = list[i];
+    	child_ctx[11] = list[i];
     	return child_ctx;
     }
 
-    // (93:1) {#if params.aVariable}
+    // (110:1) {#if params.aVariable}
     function create_if_block(ctx) {
     	let p;
     	let t0;
@@ -1706,14 +1706,14 @@ var StackRouter = (function () {
     			set_style(p, "padding", "10px");
     			set_style(p, "border-radius", "100px");
     			set_style(p, "background-color", "black");
-    			add_render_callback(() => /*p_elementresize_handler*/ ctx[5].call(p));
+    			add_render_callback(() => /*p_elementresize_handler*/ ctx[6].call(p));
     		},
     		m(target, anchor) {
     			insert(target, p, anchor);
     			append(p, t0);
     			append(p, t1);
     			append(p, t2);
-    			p_resize_listener = add_resize_listener(p, /*p_elementresize_handler*/ ctx[5].bind(p));
+    			p_resize_listener = add_resize_listener(p, /*p_elementresize_handler*/ ctx[6].bind(p));
     			current = true;
     		},
     		p(ctx, dirty) {
@@ -1742,10 +1742,10 @@ var StackRouter = (function () {
     	};
     }
 
-    // (106:2) {#each events as event}
+    // (130:2) {#each events as event}
     function create_each_block(ctx) {
     	let li;
-    	let t0_value = /*event*/ ctx[8] + "";
+    	let t0_value = /*event*/ ctx[11] + "";
     	let t0;
     	let t1;
 
@@ -1761,7 +1761,7 @@ var StackRouter = (function () {
     			append(li, t1);
     		},
     		p(ctx, dirty) {
-    			if (dirty & /*events*/ 2 && t0_value !== (t0_value = /*event*/ ctx[8] + "")) set_data(t0, t0_value);
+    			if (dirty & /*events*/ 2 && t0_value !== (t0_value = /*event*/ ctx[11] + "")) set_data(t0, t0_value);
     		},
     		d(detaching) {
     			if (detaching) detach(li);
@@ -1780,8 +1780,14 @@ var StackRouter = (function () {
     	let div2;
     	let t4;
     	let div3;
-    	let t6;
+    	let p;
+    	let t8;
+    	let video;
+    	let video_src_value;
+    	let t9;
     	let div4;
+    	let t11;
+    	let div5;
     	let ul;
     	let current;
     	let mounted;
@@ -1808,9 +1814,18 @@ var StackRouter = (function () {
     			if (if_block) if_block.c();
     			t4 = space();
     			div3 = element("div");
-    			div3.textContent = "Events so far:";
-    			t6 = space();
+    			p = element("p");
+
+    			p.innerHTML = `This component <strong>will</strong> get cached. As a result the following video
+		will be paused and resumed every time you visit this page`;
+
+    			t8 = space();
+    			video = element("video");
+    			t9 = space();
     			div4 = element("div");
+    			div4.textContent = "Events so far:";
+    			t11 = space();
+    			div5 = element("div");
     			ul = element("ul");
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
@@ -1829,11 +1844,18 @@ var StackRouter = (function () {
     			set_style(div2, "transition", "height 200ms ease");
 
     			set_style(div2, "height", (/*params*/ ctx[0].aVariable
-    			? /*pOffsetHeight*/ ctx[3]
+    			? /*pOffsetHeight*/ ctx[4]
     			: 0) + "px");
 
+    			if (video.src !== (video_src_value = "bunny.mp4")) attr(video, "src", video_src_value);
+    			video.autoplay = true;
+    			video.muted = true;
+    			video.controls = true;
     			set_style(div3, "padding-top", "10px");
+    			set_style(div4, "padding-top", "10px");
     			set_style(ul, "display", "inline-block");
+    			set_style(ul, "margin", "0");
+    			set_style(ul, "text-align", "left");
     		},
     		m(target, anchor) {
     			insert(target, div0, anchor);
@@ -1847,9 +1869,15 @@ var StackRouter = (function () {
     			if (if_block) if_block.m(div2, null);
     			insert(target, t4, anchor);
     			insert(target, div3, anchor);
-    			insert(target, t6, anchor);
+    			append(div3, p);
+    			append(div3, t8);
+    			append(div3, video);
+    			/*video_binding*/ ctx[7](video);
+    			insert(target, t9, anchor);
     			insert(target, div4, anchor);
-    			append(div4, ul);
+    			insert(target, t11, anchor);
+    			insert(target, div5, anchor);
+    			append(div5, ul);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].m(ul, null);
@@ -1858,7 +1886,7 @@ var StackRouter = (function () {
     			current = true;
 
     			if (!mounted) {
-    				dispose = listen(input, "change", /*change_handler*/ ctx[4]);
+    				dispose = listen(input, "change", /*change_handler*/ ctx[5]);
     				mounted = true;
     			}
     		},
@@ -1890,9 +1918,9 @@ var StackRouter = (function () {
     				check_outros();
     			}
 
-    			if (!current || dirty & /*params, pOffsetHeight*/ 9) {
+    			if (!current || dirty & /*params, pOffsetHeight*/ 17) {
     				set_style(div2, "height", (/*params*/ ctx[0].aVariable
-    				? /*pOffsetHeight*/ ctx[3]
+    				? /*pOffsetHeight*/ ctx[4]
     				: 0) + "px");
     			}
 
@@ -1937,8 +1965,11 @@ var StackRouter = (function () {
     			if (if_block) if_block.d();
     			if (detaching) detach(t4);
     			if (detaching) detach(div3);
-    			if (detaching) detach(t6);
+    			/*video_binding*/ ctx[7](null);
+    			if (detaching) detach(t9);
     			if (detaching) detach(div4);
+    			if (detaching) detach(t11);
+    			if (detaching) detach(div5);
     			destroy_each(each_blocks, detaching);
     			mounted = false;
     			dispose();
@@ -1949,7 +1980,12 @@ var StackRouter = (function () {
     function instance$1($$self, $$props, $$invalidate) {
     	let { params = { aVariable: null } } = $$props;
     	let events = [];
-    	let wait1s = true;
+    	let wait1s = false;
+
+    	/** @type {HTMLVideoElement} */
+    	let videoRef;
+
+    	let videoWasPlaying = true;
 
     	// Example of a resumable component lifecycle
     	onMount(() => {
@@ -1965,25 +2001,39 @@ var StackRouter = (function () {
     	});
 
     	onAfterLoad(() => {
-    		$$invalidate(1, events = [...events, "onAfterLoad"]);
+    		if (videoWasPlaying) {
+    			$$invalidate(1, events = [...events, "onAfterLoad, resuming video"]);
+    			videoRef?.play();
+    		} else {
+    			$$invalidate(1, events = [...events, "onAfterLoad"]);
+    		}
     	});
 
     	onBeforeUnload(() => {
-    		if (!wait1s) {
+    		if (wait1s) {
+    			$$invalidate(1, events = [
+    				...events,
+    				"onBeforeUnload. I'll just wait 1s before letting the router unload me"
+    			]);
+
+    			return new Promise(res => setTimeout(res, 1000));
+    		} else {
     			$$invalidate(1, events = [...events, "onBeforeUnload"]);
-    			return;
     		}
-
-    		$$invalidate(1, events = [
-    			...events,
-    			"onBeforeUnload, i'll just wait 1s before letting the router unload me"
-    		]);
-
-    		return new Promise(res => setTimeout(res, 1000));
     	});
 
     	onPause(() => {
-    		$$invalidate(1, events = [...events, "onPause"]);
+    		let message = "onPause";
+
+    		if (videoRef && !videoRef.paused) {
+    			message += ", pausing video";
+    			videoRef.pause();
+    			videoWasPlaying = true;
+    		} else {
+    			videoWasPlaying = false;
+    		}
+
+    		$$invalidate(1, events = [...events, message]);
     	});
 
     	onAfterUnload(() => {
@@ -2011,7 +2061,14 @@ var StackRouter = (function () {
 
     	function p_elementresize_handler() {
     		pOffsetHeight = this.offsetHeight;
-    		$$invalidate(3, pOffsetHeight);
+    		$$invalidate(4, pOffsetHeight);
+    	}
+
+    	function video_binding($$value) {
+    		binding_callbacks[$$value ? "unshift" : "push"](() => {
+    			videoRef = $$value;
+    			$$invalidate(3, videoRef);
+    		});
     	}
 
     	$$self.$$set = $$props => {
@@ -2024,7 +2081,16 @@ var StackRouter = (function () {
     		}
     	};
 
-    	return [params, events, wait1s, pOffsetHeight, change_handler, p_elementresize_handler];
+    	return [
+    		params,
+    		events,
+    		wait1s,
+    		videoRef,
+    		pOffsetHeight,
+    		change_handler,
+    		p_elementresize_handler,
+    		video_binding
+    	];
     }
 
     class Resumable extends SvelteComponent {
@@ -2042,7 +2108,7 @@ var StackRouter = (function () {
     	return child_ctx;
     }
 
-    // (55:2) {#each events as event}
+    // (62:2) {#each events as event}
     function create_each_block$1(ctx) {
     	let li;
     	let t0_value = /*event*/ ctx[1] + "";
@@ -2073,8 +2139,10 @@ var StackRouter = (function () {
     	let div0;
     	let t1;
     	let div1;
-    	let t3;
+    	let t6;
     	let div2;
+    	let t8;
+    	let div3;
     	let ul;
     	let each_value = /*events*/ ctx[0];
     	let each_blocks = [];
@@ -2089,9 +2157,16 @@ var StackRouter = (function () {
     			div0.innerHTML = `<h1>I&#39;m a non-resumable component</h1>`;
     			t1 = space();
     			div1 = element("div");
-    			div1.textContent = "Events so far:";
-    			t3 = space();
+
+    			div1.innerHTML = `<p>This component <strong>won&#39;t</strong> get cached. As a result the following video
+		will restart every time you visit this page</p> 
+	<video src="bunny.mp4" autoplay="" muted="" controls=""></video>`;
+
+    			t6 = space();
     			div2 = element("div");
+    			div2.textContent = "Events so far:";
+    			t8 = space();
+    			div3 = element("div");
     			ul = element("ul");
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
@@ -2099,15 +2174,21 @@ var StackRouter = (function () {
     			}
 
     			set_style(div0, "text-align", "center");
+    			set_style(div1, "padding-top", "10px");
+    			set_style(div2, "padding-top", "10px");
     			set_style(ul, "display", "inline-block");
+    			set_style(ul, "margin", "0");
+    			set_style(ul, "text-align", "left");
     		},
     		m(target, anchor) {
     			insert(target, div0, anchor);
     			insert(target, t1, anchor);
     			insert(target, div1, anchor);
-    			insert(target, t3, anchor);
+    			insert(target, t6, anchor);
     			insert(target, div2, anchor);
-    			append(div2, ul);
+    			insert(target, t8, anchor);
+    			insert(target, div3, anchor);
+    			append(div3, ul);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].m(ul, null);
@@ -2143,8 +2224,10 @@ var StackRouter = (function () {
     			if (detaching) detach(div0);
     			if (detaching) detach(t1);
     			if (detaching) detach(div1);
-    			if (detaching) detach(t3);
+    			if (detaching) detach(t6);
     			if (detaching) detach(div2);
+    			if (detaching) detach(t8);
+    			if (detaching) detach(div3);
     			destroy_each(each_blocks, detaching);
     		}
     	};
