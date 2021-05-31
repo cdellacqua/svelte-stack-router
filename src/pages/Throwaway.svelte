@@ -51,7 +51,7 @@
 </div>
 <div>Events so far:</div>
 <div>
-	<ul>
+	<ul style="display: inline-block">
 		{#each events as event}
 			<li>
 				{event}
