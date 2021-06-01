@@ -10,16 +10,15 @@ function makeStyleTag(content: string): HTMLStyleElement {
 
 export function commonTransitionGenerator(
 	duration: number,
-	styleBeforeGenerator: (loadClass: string, unloadClass: string, routerClass: string, transitionFunctionData: TransitionFunctionData) => HTMLStyleElement,
-	styleDuringGenerator: (loadClass: string, unloadClass: string, routerClass: string, transitionFunctionData: TransitionFunctionData) => HTMLStyleElement,
+	styleGenerators: (
+		(loadClass: string, unloadClass: string, routerClass: string, transitionFunctionData: TransitionFunctionData) => HTMLStyleElement
+	)[],
 ): TransitionFunction {
 	return async (transitionFunctionData) => {
 		const timestamp = new Date().getTime();
 		const unloadClass = `unload-${timestamp}`;
 		const loadClass = `load-${timestamp}`;
 		const routerClass = `router-${timestamp}`;
-		const styleBefore = styleBeforeGenerator(loadClass, unloadClass, routerClass, transitionFunctionData);
-		const styleDuring = styleDuringGenerator(loadClass, unloadClass, routerClass, transitionFunctionData);
 
 		const {
 			mountPointToUnload, mountPointToLoad, scroll, routerMountPoint,
@@ -29,11 +28,15 @@ export function commonTransitionGenerator(
 		mountPointToLoad.classList.add(loadClass);
 		routerMountPoint.classList.add(routerClass);
 
-		document.head.appendChild(styleBefore);
-		await animationFrame();
-		await animationFrame();
-		await animationFrame();
-		document.head.appendChild(styleDuring);
+		const styleNodes = new Array<HTMLStyleElement>(styleGenerators.length);
+		for (let i = 0; i < styleGenerators.length; i++) {
+			const styleNode = styleGenerators[i](loadClass, unloadClass, routerClass, transitionFunctionData);
+			styleNodes[i] = styleNode;
+			document.head.appendChild(styleNode);
+			await animationFrame();
+			await animationFrame();
+			await animationFrame();
+		}
 
 		await sleep(duration);
 
@@ -56,8 +59,9 @@ export function commonTransitionGenerator(
 			}
 		}
 
-		document.head.removeChild(styleBefore);
-		document.head.removeChild(styleDuring);
+		for (const styleNode of styleNodes) {
+			document.head.removeChild(styleNode);
+		}
 
 		mountPointToUnload?.classList.remove(unloadClass);
 		mountPointToLoad.classList.remove(loadClass);
@@ -68,92 +72,110 @@ export function commonTransitionGenerator(
 export function slide(duration: number): TransitionFunction {
 	return commonTransitionGenerator(
 		duration,
-		(loadClass, unloadClass, routerClass, {
-			navigationType, routerMountPoint,
-		}) => makeStyleTag(`
-			html {
-				scroll-behavior: smooth;
-			}
-			.${loadClass} {
-				position: absolute;
-				z-index: 2;
-				left: 0;
-				top: 0;
-				right: 0;
-				opacity: 0;
-				transform: translateX(${navigationType === NavigationType.GoBackward ? '-' : ''}50%);
-			}
-			.${unloadClass} {
-				position: relative;
-				z-index: 1;
-				opacity: 1;
-				transform: translateX(0%);
-			}
-			.${routerClass} {
-				position: relative;
-				overflow: hidden;
-				min-height: ${routerMountPoint.offsetHeight}px;
-				min-width: ${routerMountPoint.offsetWidth}px;
-			}
-		`),
-		(loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
-			.${loadClass} {
-				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
-				opacity: 1;
-				transform: translateX(0%);
-			}
-			.${unloadClass} {
-				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
-				opacity: 0;
-				transform: translateX(${navigationType === NavigationType.GoBackward ? '' : '-'}50%);
-			}
-		`),
+		[
+			(loadClass, unloadClass, routerClass, {
+				navigationType,
+			}) => makeStyleTag(`
+				html {
+					scroll-behavior: smooth;
+				}
+				.${loadClass} {
+					position: absolute;
+					z-index: 2;
+					left: 0;
+					top: 0;
+					right: 0;
+					opacity: 0;
+					transform: translateX(${navigationType === NavigationType.GoBackward ? '-' : ''}50%);
+				}
+				.${unloadClass} {
+					position: relative;
+					z-index: 1;
+					opacity: 1;
+					transform: translateX(0%);
+				}
+				.${routerClass} {
+					position: relative;
+					overflow: hidden;
+				}
+			`),
+			(_1, _2, routerClass, {
+				mountPointToLoad,
+				mountPointToUnload,
+			}) => makeStyleTag(`
+				.${routerClass} {
+					min-height: ${Math.max(mountPointToLoad.offsetHeight, mountPointToUnload?.offsetHeight || 0)}px;
+					min-width: ${Math.max(mountPointToLoad.offsetWidth, mountPointToUnload?.offsetWidth || 0)}px;
+				}
+			`),
+			(loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
+				.${loadClass} {
+					transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
+					opacity: 1;
+					transform: translateX(0%);
+				}
+				.${unloadClass} {
+					transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
+					opacity: 0;
+					transform: translateX(${navigationType === NavigationType.GoBackward ? '' : '-'}50%);
+				}
+			`),
+		],
 	);
 }
 
 export function dive(duration: number): TransitionFunction {
 	return commonTransitionGenerator(
 		duration,
-		(loadClass, unloadClass, routerClass, { navigationType, routerMountPoint }) => makeStyleTag(`
-			html {
-				scroll-behavior: smooth;
-			}
-			.${loadClass} {
-				position: absolute;
-				z-index: 2;
-				left: 0;
-				top: 0;
-				right: 0;
-				opacity: 0;
-				transform: translateZ(${navigationType === NavigationType.GoBackward ? '' : '-'}150px);
-			}
-			.${unloadClass} {
-				position: relative;
-				z-index: 1;
-				opacity: 1;
-				transform: translateZ(0px);
-			}
-			.${routerClass} {
-				perspective: 1200px;
-				perspective-origin: top center;
-				position: relative;
-				overflow: hidden;
-				min-height: ${routerMountPoint.offsetHeight}px;
-				min-width: ${routerMountPoint.offsetWidth}px;
-			}
-		`),
-		(loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
-			.${loadClass} {
-				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
-				opacity: 1;
-				transform: translateZ(0px);
-			}
-			.${unloadClass} {
-				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
-				opacity: 0;
-				transform: translateZ(${navigationType === NavigationType.GoBackward ? '-' : ''}150px);
-			}
-		`),
+		[
+			(loadClass, unloadClass, routerClass, { navigationType }) => makeStyleTag(`
+				html {
+					scroll-behavior: smooth;
+				}
+				.${loadClass} {
+					position: absolute;
+					z-index: 2;
+					left: 0;
+					top: 0;
+					right: 0;
+					opacity: 0;
+					transform: translateZ(${navigationType === NavigationType.GoBackward ? '' : '-'}150px);
+				}
+				.${unloadClass} {
+					position: relative;
+					z-index: 1;
+					opacity: 1;
+					transform: translateZ(0px);
+				}
+				.${routerClass} {
+					perspective: 1200px;
+					perspective-origin: top center;
+					position: relative;
+					overflow: hidden;
+				}
+			`),
+			(_1, _2, routerClass, {
+				mountPointToLoad,
+				mountPointToUnload,
+			}) => makeStyleTag(`
+				.${routerClass} {
+					min-height: ${Math.max(mountPointToLoad.offsetHeight, mountPointToUnload?.offsetHeight || 0)}px;
+					min-width: ${Math.max(mountPointToLoad.offsetWidth, mountPointToUnload?.offsetWidth || 0)}px;
+				}
+			`),
+			(loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
+				.${loadClass} {
+					transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
+					opacity: 1;
+					transform: translateZ(0px);
+				}
+				.${unloadClass} {
+					transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
+					opacity: 0;
+					transform: translateZ(${navigationType === NavigationType.GoBackward ? '-' : ''}150px);
+				}
+			`),
+		],
 	);
 }
 
