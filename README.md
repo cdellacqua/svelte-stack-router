@@ -85,19 +85,33 @@ Example:
 <StackRouter {routes} on:navigation-start={() => alert('navigation started')} />
 ```
 
-## Navigation functions and links
+## Navigation functions, links and stores
 
+### Programmatic navigation
 The following functions enable programmatic navigation:
 - `push('/some-route')`
 - `pop()` or `pop({ some: 'return value' })` (see [Returning values](#returning-values))
 - `replace('/a-route')`
 
+### Links
 This library also provides a custom `use:link` action that you can add to your `<a>` elements to create links. This action serves two purposes:
-- if you are using the router in "hash mode" (e.g. in a purely client-side rendering context), it lets you write paths without having to manually add the `#` prefix to all the `href`. For example `<a href="/example-1" use:link>Example</a>` is automatically
+- if you are using the router in "hash mode" (e.g. in a purely client-side rendering context), it lets you write paths without having to manually add the `#` prefix to all the `href`. For example `<a href="/example-1" use:link>Example</a>` (or `<a use:link={"/example-1"}>Example</a>`) is automatically
 converted to `<a href="#/example-1">Example</a>`. This is particularly helpful if you later decide to switch to "path mode" (see next point)
 - if you are using the router in "path mode" (e.g. in a server-side rendering context), it prevents the default browser navigation behavior and, on user click, pushes the new location using the History API of the browser
 
-These navigation functions have been heavily inspired by [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router).
+### Stores
+To easily access information about the current route, you can import the following stores:
+- `location`: reflects the relative URL, without the leading '#' if in hash mode
+- `pathname`: store derived from location that extracts the path section of the URL
+- `search`: store derived from location that extracts the query string (starting from '?' included)
+
+For example, if you are on a page like http://localhost:5000/#/home/some-page/?someParam=a%20string, the following comparisons will be true:
+- `$location === "/home/some-page/?someParam=a%20string"`
+- `$pathname === "/home/some-page/"`
+- `$search === "?someParam=a%20string"`
+
+
+These features have been heavily inspired by [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router).
 
 ## Returning values
 
