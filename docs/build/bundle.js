@@ -1308,10 +1308,14 @@ var StackRouter = (function () {
     /* API FUNCTIONS */
     /**
      * Replaces the current history location and state
+     * If the new location equals the current one, this function won't modify the browser history
      * @param location new location
      * @param state new history state
      */
     async function replace(location, state) {
+        if (location === getLocation()) {
+            return;
+        }
         await waitForHistoryState(() => {
             window.history.replaceState({
                 ...(state || {}),
