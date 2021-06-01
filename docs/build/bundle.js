@@ -803,23 +803,25 @@ var StackRouter = (function () {
         styleTag.innerHTML = content;
         return styleTag;
     }
-    function commonTransitionGenerator(duration, styleBeforeGenerator, styleDuringGenerator) {
+    function commonTransitionGenerator(duration, styleGenerators) {
         return async (transitionFunctionData) => {
             const timestamp = new Date().getTime();
             const unloadClass = `unload-${timestamp}`;
             const loadClass = `load-${timestamp}`;
             const routerClass = `router-${timestamp}`;
-            const styleBefore = styleBeforeGenerator(loadClass, unloadClass, routerClass, transitionFunctionData);
-            const styleDuring = styleDuringGenerator(loadClass, unloadClass, routerClass, transitionFunctionData);
             const { mountPointToUnload, mountPointToLoad, scroll, routerMountPoint, } = transitionFunctionData;
             mountPointToUnload === null || mountPointToUnload === void 0 ? void 0 : mountPointToUnload.classList.add(unloadClass);
             mountPointToLoad.classList.add(loadClass);
             routerMountPoint.classList.add(routerClass);
-            document.head.appendChild(styleBefore);
-            await animationFrame();
-            await animationFrame();
-            await animationFrame();
-            document.head.appendChild(styleDuring);
+            const styleNodes = new Array(styleGenerators.length);
+            for (let i = 0; i < styleGenerators.length; i++) {
+                const styleNode = styleGenerators[i](loadClass, unloadClass, routerClass, transitionFunctionData);
+                styleNodes[i] = styleNode;
+                document.head.appendChild(styleNode);
+                await animationFrame();
+                await animationFrame();
+                await animationFrame();
+            }
             await sleep(duration);
             window.scrollTo(scroll.x, scroll.y);
             if (window.getComputedStyle(document.documentElement).scrollBehavior === 'smooth') {
@@ -835,92 +837,107 @@ var StackRouter = (function () {
                     await sleep(10);
                 }
             }
-            document.head.removeChild(styleBefore);
-            document.head.removeChild(styleDuring);
+            for (const styleNode of styleNodes) {
+                document.head.removeChild(styleNode);
+            }
             mountPointToUnload === null || mountPointToUnload === void 0 ? void 0 : mountPointToUnload.classList.remove(unloadClass);
             mountPointToLoad.classList.remove(loadClass);
             routerMountPoint.classList.remove(routerClass);
         };
     }
     function slide(duration) {
-        return commonTransitionGenerator(duration, (loadClass, unloadClass, routerClass, { navigationType, routerMountPoint, }) => makeStyleTag(`
-			html {
-				scroll-behavior: smooth;
-			}
-			.${loadClass} {
-				position: absolute;
-				z-index: 2;
-				left: 0;
-				top: 0;
-				right: 0;
-				opacity: 0;
-				transform: translateX(${navigationType === NavigationType.GoBackward ? '-' : ''}50%);
-			}
-			.${unloadClass} {
-				position: relative;
-				z-index: 1;
-				opacity: 1;
-				transform: translateX(0%);
-			}
-			.${routerClass} {
-				position: relative;
-				overflow: hidden;
-				min-height: ${routerMountPoint.offsetHeight}px;
-				min-width: ${routerMountPoint.offsetWidth}px;
-			}
-		`), (loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
-			.${loadClass} {
-				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
-				opacity: 1;
-				transform: translateX(0%);
-			}
-			.${unloadClass} {
-				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
-				opacity: 0;
-				transform: translateX(${navigationType === NavigationType.GoBackward ? '' : '-'}50%);
-			}
-		`));
+        return commonTransitionGenerator(duration, [
+            (loadClass, unloadClass, routerClass, { navigationType, }) => makeStyleTag(`
+				html {
+					scroll-behavior: smooth;
+				}
+				.${loadClass} {
+					position: absolute;
+					z-index: 2;
+					left: 0;
+					top: 0;
+					right: 0;
+					opacity: 0;
+					transform: translateX(${navigationType === NavigationType.GoBackward ? '-' : ''}50%);
+				}
+				.${unloadClass} {
+					position: relative;
+					z-index: 1;
+					opacity: 1;
+					transform: translateX(0%);
+				}
+				.${routerClass} {
+					position: relative;
+					overflow: hidden;
+				}
+			`),
+            (_1, _2, routerClass, { mountPointToLoad, mountPointToUnload, }) => makeStyleTag(`
+				.${routerClass} {
+					min-height: ${Math.max(mountPointToLoad.offsetHeight, (mountPointToUnload === null || mountPointToUnload === void 0 ? void 0 : mountPointToUnload.offsetHeight) || 0)}px;
+					min-width: ${Math.max(mountPointToLoad.offsetWidth, (mountPointToUnload === null || mountPointToUnload === void 0 ? void 0 : mountPointToUnload.offsetWidth) || 0)}px;
+				}
+			`),
+            (loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
+				.${loadClass} {
+					transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
+					opacity: 1;
+					transform: translateX(0%);
+				}
+				.${unloadClass} {
+					transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
+					opacity: 0;
+					transform: translateX(${navigationType === NavigationType.GoBackward ? '' : '-'}50%);
+				}
+			`),
+        ]);
     }
     function dive(duration) {
-        return commonTransitionGenerator(duration, (loadClass, unloadClass, routerClass, { navigationType, routerMountPoint }) => makeStyleTag(`
-			html {
-				scroll-behavior: smooth;
-			}
-			.${loadClass} {
-				position: absolute;
-				z-index: 2;
-				left: 0;
-				top: 0;
-				right: 0;
-				opacity: 0;
-				transform: translateZ(${navigationType === NavigationType.GoBackward ? '' : '-'}150px);
-			}
-			.${unloadClass} {
-				position: relative;
-				z-index: 1;
-				opacity: 1;
-				transform: translateZ(0px);
-			}
-			.${routerClass} {
-				perspective: 1200px;
-				perspective-origin: top center;
-				position: relative;
-				overflow: hidden;
-				min-height: ${routerMountPoint.offsetHeight}px;
-				min-width: ${routerMountPoint.offsetWidth}px;
-			}
-		`), (loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
-			.${loadClass} {
-				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
-				opacity: 1;
-				transform: translateZ(0px);
-			}
-			.${unloadClass} {
-				transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
-				opacity: 0;
-				transform: translateZ(${navigationType === NavigationType.GoBackward ? '-' : ''}150px);
-			}
-		`));
+        return commonTransitionGenerator(duration, [
+            (loadClass, unloadClass, routerClass, { navigationType }) => makeStyleTag(`
+				html {
+					scroll-behavior: smooth;
+				}
+				.${loadClass} {
+					position: absolute;
+					z-index: 2;
+					left: 0;
+					top: 0;
+					right: 0;
+					opacity: 0;
+					transform: translateZ(${navigationType === NavigationType.GoBackward ? '' : '-'}150px);
+				}
+				.${unloadClass} {
+					position: relative;
+					z-index: 1;
+					opacity: 1;
+					transform: translateZ(0px);
+				}
+				.${routerClass} {
+					perspective: 1200px;
+					perspective-origin: top center;
+					position: relative;
+					overflow: hidden;
+				}
+			`),
+            (_1, _2, routerClass, { mountPointToLoad, mountPointToUnload, }) => makeStyleTag(`
+				.${routerClass} {
+					min-height: ${Math.max(mountPointToLoad.offsetHeight, (mountPointToUnload === null || mountPointToUnload === void 0 ? void 0 : mountPointToUnload.offsetHeight) || 0)}px;
+					min-width: ${Math.max(mountPointToLoad.offsetWidth, (mountPointToUnload === null || mountPointToUnload === void 0 ? void 0 : mountPointToUnload.offsetWidth) || 0)}px;
+				}
+			`),
+            (loadClass, unloadClass, _, { navigationType }) => makeStyleTag(`
+				.${loadClass} {
+					transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear ${Math.floor(duration / 2)}ms;
+					opacity: 1;
+					transform: translateZ(0px);
+				}
+				.${unloadClass} {
+					transition: transform ${duration}ms, opacity ${Math.floor(duration / 2)}ms linear;
+					opacity: 0;
+					transform: translateZ(${navigationType === NavigationType.GoBackward ? '-' : ''}150px);
+				}
+			`),
+        ]);
     }
     function noAnimation() {
         return ({ scroll }) => {
