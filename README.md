@@ -31,7 +31,7 @@ The demo files can be found in [src/](https://github.com/cdellacqua/svelte-stack
 
 Example:
 
-`App.svlete`
+`App.svelte`
 ```svelte
 <script>
 	import { StackRouter } from 'svelte-stack-router';
@@ -78,7 +78,36 @@ Doing this will make your component disposable, so that it will be mounted and d
 You can listen for the following events:
 - `on:navigation-start` emitted before unloading the old page and before loading the new page
 - `on:navigation-end` emitted after unloading the old page and after loading the new page
-- `on:error` emitted when the current location doesn't match with any available route
+- `on:forbidden` emitted when a route couldn't be reached because a guard returned a falsy value
+	- ```
+		{
+			message: 'access forbidden by guard',
+			params: <page params preview, if any>,
+			location: <location the router was trying to navigate to>
+		}
+		```
+- `on:error` emitted when a route couldn't be reached due to an error. The error can be one of the following (`<...>` indicates some value at runtime):
+	- ```
+		{
+			message: 'no route found',
+			location: <location the router was trying to navigate to>
+		}
+		```
+	- ```
+		{
+			message: 'unable to get component from provider',
+			location: <location the router was trying to navigate to>,
+			err: <error thrown by the provider function>
+		}
+		```
+	- ```
+		{
+			message: 'guard error',
+			params: <page params preview, if any>,
+			location: <location the router was trying to navigate to>,
+			err: <error thrown by the guard>
+		}
+		```
 
 Example:
 ```svelte
@@ -137,6 +166,89 @@ The `<StackRouter>` component supports a variety of options:
 |restoreScroll|boolean|whether or not to restore the scroll position when navigating backwards|true|
 |transitionFn|TransitionFunction|a function that handles the transition between two pages|dive(300)|
 |routes|Record.<string, SvelteComponent>|a key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent|N/A - **required**|
+
+## Advanced routing
+
+This router supports guards and asynchronously provided components (e.g. when using lazy loading).
+
+Guards are functions that can either return a `boolean` or a `Promise<boolean>`. They are called sequentially and
+the first one to return (or resolve to) `false` causes a navigation error ("access forbidden by guard").
+
+If a route has some parameters, the guard will receive them before the component.
+
+Guard type:
+```typescript
+export type Guard = (paramsPreview?: Params) => boolean | Promise<boolean>;
+```
+
+
+Here are some examples:
+- provide a component asynchronously:
+
+	`App.svelte`
+	```svelte
+	<script>
+		import { StackRouter } from 'svelte-stack-router';
+		import Home from './Home.svelte';
+
+		const routes = {
+			"/": Home,
+			"*": { componentProvider: () => import('./NotFound.svelte') }
+		};
+	</script>
+	<StackRouter {routes} />
+	```
+- add guards to a route:
+ 
+	`App.svelte`
+	```svelte
+	<script>
+		import { StackRouter } from 'svelte-stack-router';
+		import Home from './Home.svelte';
+		import Login from './Login.svelte';
+		import NotFound from './NotFound.svelte';
+		import user from './user';
+
+		const routes = {
+			"/login": {
+				component: Login,
+				// You can have multiple guards
+				guards: [
+					() => $user === null,
+					
+					// Each guard gets a preview of the params that are going to
+					// be passed to the component if all guards return true
+					(paramsPreview) => Number.isNumber(paramsPreview.id),
+				]
+			},
+			"/": Home,
+			"*": NotFound
+		};
+	</script>
+	<StackRouter {routes} />
+	```
+- add guards to a route with an async component provider:
+	
+	`App.svelte`
+	```svelte
+	<script>
+		import { StackRouter } from 'svelte-stack-router';
+		import Home from './Home.svelte';
+		import NotFound from './NotFound.svelte';
+
+		const routes = {
+			"/": Home,
+			"/login": {
+				componentProvider: () => import('./Login.svelte'),
+				// You can use "guard" instead of "guards" if you
+				// want to pass only one function instead of an array
+				guard: () => $user === null,
+			},
+			"*": NotFound
+		};
+	</script>
+	<StackRouter {routes} />
+	```
 
 ### TransitionFunction and available transitions
 

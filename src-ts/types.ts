@@ -78,6 +78,10 @@ export interface Config {
 	dispatch: ((eventName: string, eventData?: Record<any, any>) => void) | null,
 }
 
+export type Params = Record<string, string | null>;
+
+export type Guard = (params?: Params) => boolean | Promise<boolean>;
+
 export interface ComponentConfig {
 	onResume?: ((returnValue: any) => any)[],
 	onPause?: (() => any)[],

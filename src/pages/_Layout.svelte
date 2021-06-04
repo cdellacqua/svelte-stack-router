@@ -1,13 +1,8 @@
 <script>
-	import {
-		StackRouter,
-		slide,
-		dive,
-		noAnimation,
-		pathname,
-	} from "../.";
+	import { StackRouter, slide, dive, noAnimation, pathname, push } from "../.";
 	import routes from "../_routes";
 	import Links from "../components/Links.svelte";
+	import youShallPass from "../stores/you-shall-pass";
 
 	let transitions = [
 		{ label: "dive", fn: dive(300) },
@@ -19,6 +14,11 @@
 	let transition = transitions[transitionIndex];
 
 	$: transitionIndex, (transition = transitions[transitionIndex]);
+
+	function handleForbidden({ detail }) {
+		alert(`Access forbidden to ${detail.location}`);
+		push("/");
+	}
 </script>
 
 <div style="padding: 10px; overflow: hidden">
@@ -35,6 +35,12 @@
 			</select>
 		</label>
 	</div>
+	<div style="text-align: center">
+		<label
+			>Enable guarded route:
+			<input type="checkbox" bind:checked={$youShallPass} />
+		</label>
+	</div>
 	<Links />
 	<StackRouter
 		{routes}
@@ -42,5 +48,6 @@
 		on:navigation-end={console.log}
 		on:navigation-start={console.log}
 		on:error={console.error}
+		on:forbidden={handleForbidden}
 	/>
 </div>
