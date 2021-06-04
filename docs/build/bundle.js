@@ -36,6 +36,10 @@ var StackRouter = (function () {
     function component_subscribe(component, store, callback) {
         component.$$.on_destroy.push(subscribe(store, callback));
     }
+    function set_store_value(store, ret, value = ret) {
+        store.set(value);
+        return ret;
+    }
     function action_destroyer(action_result) {
         return action_result && is_function(action_result.destroy) ? action_result.destroy : noop;
     }
@@ -1095,9 +1099,32 @@ var StackRouter = (function () {
             return pattern.test(pathname);
         });
         if (routeKey === undefined || routeKey === null) {
-            return null;
+            return {
+                message: 'no route found',
+            };
         }
         const params = buildParams(pathname, routeKey);
+        // Check guards before updating params
+        const guards = config.routes[routeKey].guards
+            || (config.routes[routeKey].guard && [config.routes[routeKey].guard])
+            || [];
+        for (const guard of guards) {
+            try {
+                if (!await guard(params)) {
+                    return {
+                        message: 'access forbidden by guard',
+                        params,
+                    };
+                }
+            }
+            catch (err) {
+                return {
+                    message: 'guard error',
+                    params,
+                    err,
+                };
+            }
+        }
         const resumableEntry = cache.find((s) => s.routeMatch === routeKey);
         let entry;
         if (resumableEntry) {
@@ -1113,9 +1140,32 @@ var StackRouter = (function () {
             editableEntryConfig = {
                 resumable: config.defaultResumable,
             };
+            let component;
+            if (typeof config.routes[routeKey] !== 'object') {
+                component = config.routes[routeKey];
+            }
+            else if (config.routes[routeKey].component) {
+                component = config.routes[routeKey].component;
+            }
+            else if (config.routes[routeKey].componentProvider) {
+                try {
+                    const resolved = await config.routes[routeKey].componentProvider();
+                    component = resolved.default || resolved;
+                    // Cache the promise result so that it will be available in the future
+                    // without having to call the provider again
+                    config.routes[routeKey].component = component;
+                }
+                catch (err) {
+                    return {
+                        message: 'unable to get component from provider',
+                        err,
+                    };
+                }
+            }
             entry = {
-                component: config.routes[routeKey],
-                componentInstance: new config.routes[routeKey]({ target: mountPoint, props: { params } }),
+                component,
+                // eslint-disable-next-line new-cap
+                componentInstance: new component({ target: mountPoint, props: { params } }),
                 mountPoint,
                 pathname,
                 routeMatch: routeKey,
@@ -1128,7 +1178,7 @@ var StackRouter = (function () {
     }
     let activeCacheEntry = null;
     async function handleHistoryChange(historyItem) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         const currentCache = get_store_value(internalCache);
         const isNewHistoryItem = !historyItem.state;
         if (isNewHistoryItem) {
@@ -1137,14 +1187,25 @@ var StackRouter = (function () {
             };
             await waitForHistoryState(() => window.history.replaceState(historyItem.state, '', (config.useHash ? '#' : '') + historyItem.location));
         }
-        const pageToLoad = await prepareCacheEntryToActivate(currentCache, getPathname(historyItem.location));
-        if (!pageToLoad) {
-            (_a = config.dispatch) === null || _a === void 0 ? void 0 : _a.call(config, 'error', {
-                message: 'no route found',
-                location: historyItem.location,
-            });
+        const pageToLoadResult = await prepareCacheEntryToActivate(currentCache, getPathname(historyItem.location));
+        if ('message' in pageToLoadResult) {
+            switch (pageToLoadResult.message) {
+                case 'access forbidden by guard':
+                    (_a = config.dispatch) === null || _a === void 0 ? void 0 : _a.call(config, 'forbidden', {
+                        ...pageToLoadResult,
+                        location: historyItem.location,
+                    });
+                    break;
+                default:
+                    (_b = config.dispatch) === null || _b === void 0 ? void 0 : _b.call(config, 'error', {
+                        ...pageToLoadResult,
+                        location: historyItem.location,
+                    });
+                    break;
+            }
             return;
         }
+        const pageToLoad = pageToLoadResult;
         const pageToUnload = activeCacheEntry;
         const newTopIndexInCurrentStack = currentCache.findIndex((s) => s.routeMatch === pageToLoad.routeMatch);
         let pageToLoadAction = LoadableEntryAction.NoOp;
@@ -1181,7 +1242,7 @@ var StackRouter = (function () {
                 navigationType = NavigationType.Replace;
             }
         }
-        (_b = config.dispatch) === null || _b === void 0 ? void 0 : _b.call(config, 'navigation-start', {
+        (_c = config.dispatch) === null || _c === void 0 ? void 0 : _c.call(config, 'navigation-start', {
             location: historyItem.location,
             navigationType,
             pageToLoad,
@@ -1296,7 +1357,7 @@ var StackRouter = (function () {
         internalCache.set(currentCache);
         activeCacheEntry = pageToLoad;
         lastHistoryTimestamp = historyItem.state.timestamp;
-        (_c = config.dispatch) === null || _c === void 0 ? void 0 : _c.call(config, 'navigation-end', {
+        (_d = config.dispatch) === null || _d === void 0 ? void 0 : _d.call(config, 'navigation-end', {
             location: historyItem.location,
             navigationType,
             pageToLoad,
@@ -1705,7 +1766,7 @@ var StackRouter = (function () {
     	return child_ctx;
     }
 
-    // (110:1) {#if params.aVariable}
+    // (109:1) {#if params.aVariable}
     function create_if_block(ctx) {
     	let p;
     	let t0;
@@ -1763,7 +1824,7 @@ var StackRouter = (function () {
     	};
     }
 
-    // (130:2) {#each events as event}
+    // (129:2) {#each events as event}
     function create_each_block(ctx) {
     	let li;
     	let t0_value = /*event*/ ctx[11] + "";
@@ -1855,7 +1916,6 @@ var StackRouter = (function () {
 
     			set_style(div0, "text-align", "center");
     			attr(input, "type", "checkbox");
-    			input.checked = /*wait1s*/ ctx[2];
     			set_style(label, "background-color", "black");
     			set_style(label, "padding", "10px");
     			set_style(label, "display", "inline-block");
@@ -1884,6 +1944,7 @@ var StackRouter = (function () {
     			insert(target, div1, anchor);
     			append(div1, label);
     			append(label, input);
+    			input.checked = /*wait1s*/ ctx[2];
     			append(label, t2);
     			insert(target, t3, anchor);
     			insert(target, div2, anchor);
@@ -1907,12 +1968,12 @@ var StackRouter = (function () {
     			current = true;
 
     			if (!mounted) {
-    				dispose = listen(input, "change", /*change_handler*/ ctx[5]);
+    				dispose = listen(input, "change", /*input_change_handler*/ ctx[5]);
     				mounted = true;
     			}
     		},
     		p(ctx, [dirty]) {
-    			if (!current || dirty & /*wait1s*/ 4) {
+    			if (dirty & /*wait1s*/ 4) {
     				input.checked = /*wait1s*/ ctx[2];
     			}
 
@@ -2078,7 +2139,11 @@ var StackRouter = (function () {
     	}
 
     	let pOffsetHeight;
-    	const change_handler = ({ target }) => $$invalidate(2, wait1s = target.checked);
+
+    	function input_change_handler() {
+    		wait1s = this.checked;
+    		$$invalidate(2, wait1s);
+    	}
 
     	function p_elementresize_handler() {
     		pOffsetHeight = this.offsetHeight;
@@ -2108,7 +2173,7 @@ var StackRouter = (function () {
     		wait1s,
     		videoRef,
     		pOffsetHeight,
-    		change_handler,
+    		input_change_handler,
     		p_elementresize_handler,
     		video_binding
     	];
@@ -2387,16 +2452,158 @@ var StackRouter = (function () {
     	}
     }
 
+    /* src/pages/Guarded.svelte generated by Svelte v3.38.2 */
+
+    function create_fragment$6(ctx) {
+    	let div0;
+    	let t1;
+    	let div1;
+
+    	return {
+    		c() {
+    			div0 = element("div");
+    			div0.innerHTML = `<h1>I&#39;m a guarded component</h1>`;
+    			t1 = space();
+    			div1 = element("div");
+    			div1.textContent = "You shall be able to reach me only if you checked \"Enable guarded route\" first";
+    			set_style(div0, "text-align", "center");
+    		},
+    		m(target, anchor) {
+    			insert(target, div0, anchor);
+    			insert(target, t1, anchor);
+    			insert(target, div1, anchor);
+    		},
+    		p: noop,
+    		i: noop,
+    		o: noop,
+    		d(detaching) {
+    			if (detaching) detach(div0);
+    			if (detaching) detach(t1);
+    			if (detaching) detach(div1);
+    		}
+    	};
+    }
+
+    class Guarded extends SvelteComponent {
+    	constructor(options) {
+    		super();
+    		init(this, options, null, create_fragment$6, safe_not_equal, {});
+    	}
+    }
+
+    var asyncComponentLoaded = writable(false);
+
+    /* src/pages/AsyncComponent.svelte generated by Svelte v3.38.2 */
+
+    function create_fragment$7(ctx) {
+    	let div0;
+    	let t1;
+    	let div1;
+
+    	return {
+    		c() {
+    			div0 = element("div");
+    			div0.innerHTML = `<h1>I&#39;m an asynchronously loaded component</h1>`;
+    			t1 = space();
+    			div1 = element("div");
+    			div1.textContent = "I'll take some time to get loaded the first time, but if you come back I'll be\n\tready, even if I'm not resumable!";
+    			set_style(div0, "text-align", "center");
+    		},
+    		m(target, anchor) {
+    			insert(target, div0, anchor);
+    			insert(target, t1, anchor);
+    			insert(target, div1, anchor);
+    		},
+    		p: noop,
+    		i: noop,
+    		o: noop,
+    		d(detaching) {
+    			if (detaching) detach(div0);
+    			if (detaching) detach(t1);
+    			if (detaching) detach(div1);
+    		}
+    	};
+    }
+
+    function instance$4($$self, $$props, $$invalidate) {
+    	let $asyncComponentLoaded;
+    	component_subscribe($$self, asyncComponentLoaded, $$value => $$invalidate(0, $asyncComponentLoaded = $$value));
+    	set_store_value(asyncComponentLoaded, $asyncComponentLoaded = true, $asyncComponentLoaded);
+    	setResumable(false);
+    	return [];
+    }
+
+    class AsyncComponent extends SvelteComponent {
+    	constructor(options) {
+    		super();
+    		init(this, options, instance$4, create_fragment$7, safe_not_equal, {});
+    	}
+    }
+
+    var youShallPass = writable(false);
+
     var routes = {
     	'/': Home,
     	'/resumable/:aVariable?': Resumable,
     	'/throwaway': Throwaway,
+    	'/guarded': {
+    		component: Guarded,
+    		guard: () => get_store_value(youShallPass),
+    	},
+    	'/async': {
+    		componentProvider: () => new Promise(
+    			(resolve, reject) => setTimeout(
+    				// Simulate lazy loading
+    				() => resolve(AsyncComponent),
+
+    				// Simulate a network error
+    				// The promise can fail. In that case the router will emit an appropriate "error" event
+    				// with the details and the original error returned by the failed promise
+    				// () => reject(new Error('oh no!')),
+    				1000,
+    			),
+    		),
+    	},
     	'/redirect': Redirect,
     	'*': NotFound,
     };
 
     /* src/components/Links.svelte generated by Svelte v3.38.2 */
 
+    function create_else_block(ctx) {
+    	let t;
+
+    	return {
+    		c() {
+    			t = text("(will take 1s)");
+    		},
+    		m(target, anchor) {
+    			insert(target, t, anchor);
+    		},
+    		d(detaching) {
+    			if (detaching) detach(t);
+    		}
+    	};
+    }
+
+    // (18:2) {#if $asyncComponentLoaded}
+    function create_if_block_1(ctx) {
+    	let t;
+
+    	return {
+    		c() {
+    			t = text("(will be instantaneous)");
+    		},
+    		m(target, anchor) {
+    			insert(target, t, anchor);
+    		},
+    		d(detaching) {
+    			if (detaching) detach(t);
+    		}
+    	};
+    }
+
+    // (24:1) {#if historyLength > 2}
     function create_if_block$1(ctx) {
     	let button;
     	let mounted;
@@ -2411,7 +2618,7 @@ var StackRouter = (function () {
     			insert(target, button, anchor);
 
     			if (!mounted) {
-    				dispose = listen(button, "click", /*click_handler*/ ctx[2]);
+    				dispose = listen(button, "click", /*click_handler*/ ctx[3]);
     				mounted = true;
     			}
     		},
@@ -2424,7 +2631,7 @@ var StackRouter = (function () {
     	};
     }
 
-    function create_fragment$6(ctx) {
+    function create_fragment$8(ctx) {
     	let div;
     	let a0;
     	let link_action;
@@ -2441,9 +2648,24 @@ var StackRouter = (function () {
     	let a4;
     	let link_action_4;
     	let t9;
+    	let a5;
+    	let link_action_5;
+    	let t11;
+    	let a6;
+    	let t12;
+    	let link_action_6;
+    	let t13;
     	let mounted;
     	let dispose;
-    	let if_block = /*historyLength*/ ctx[0] > 2 && create_if_block$1(ctx);
+
+    	function select_block_type(ctx, dirty) {
+    		if (/*$asyncComponentLoaded*/ ctx[1]) return create_if_block_1;
+    		return create_else_block;
+    	}
+
+    	let current_block_type = select_block_type(ctx);
+    	let if_block0 = current_block_type(ctx);
+    	let if_block1 = /*historyLength*/ ctx[0] > 2 && create_if_block$1(ctx);
 
     	return {
     		c() {
@@ -2463,12 +2685,21 @@ var StackRouter = (function () {
     			a4 = element("a");
     			a4.textContent = "Go to 404";
     			t9 = space();
-    			if (if_block) if_block.c();
+    			a5 = element("a");
+    			a5.textContent = "Go to Guarded";
+    			t11 = space();
+    			a6 = element("a");
+    			t12 = text("Go to Async\n\t\t");
+    			if_block0.c();
+    			t13 = space();
+    			if (if_block1) if_block1.c();
     			attr(a0, "href", "/");
     			attr(a1, "href", "/resumable");
     			attr(a2, "href", "/resumable/here you go!");
     			attr(a3, "href", "/throwaway");
     			attr(a4, "href", "/unregistered-route");
+    			attr(a5, "href", "/guarded");
+    			attr(a6, "href", "/async");
     			set_style(div, "text-align", "center");
     			set_style(div, "margin-bottom", "20px");
     		},
@@ -2484,7 +2715,13 @@ var StackRouter = (function () {
     			append(div, t7);
     			append(div, a4);
     			append(div, t9);
-    			if (if_block) if_block.m(div, null);
+    			append(div, a5);
+    			append(div, t11);
+    			append(div, a6);
+    			append(a6, t12);
+    			if_block0.m(a6, null);
+    			append(div, t13);
+    			if (if_block1) if_block1.m(div, null);
 
     			if (!mounted) {
     				dispose = [
@@ -2492,56 +2729,71 @@ var StackRouter = (function () {
     					action_destroyer(link_action_1 = link.call(null, a1)),
     					action_destroyer(link_action_2 = link.call(null, a2)),
     					action_destroyer(link_action_3 = link.call(null, a3)),
-    					action_destroyer(link_action_4 = link.call(null, a4))
+    					action_destroyer(link_action_4 = link.call(null, a4)),
+    					action_destroyer(link_action_5 = link.call(null, a5)),
+    					action_destroyer(link_action_6 = link.call(null, a6))
     				];
 
     				mounted = true;
     			}
     		},
     		p(ctx, [dirty]) {
-    			if (/*historyLength*/ ctx[0] > 2) {
-    				if (if_block) {
-    					if_block.p(ctx, dirty);
-    				} else {
-    					if_block = create_if_block$1(ctx);
-    					if_block.c();
-    					if_block.m(div, null);
+    			if (current_block_type !== (current_block_type = select_block_type(ctx))) {
+    				if_block0.d(1);
+    				if_block0 = current_block_type(ctx);
+
+    				if (if_block0) {
+    					if_block0.c();
+    					if_block0.m(a6, null);
     				}
-    			} else if (if_block) {
-    				if_block.d(1);
-    				if_block = null;
+    			}
+
+    			if (/*historyLength*/ ctx[0] > 2) {
+    				if (if_block1) {
+    					if_block1.p(ctx, dirty);
+    				} else {
+    					if_block1 = create_if_block$1(ctx);
+    					if_block1.c();
+    					if_block1.m(div, null);
+    				}
+    			} else if (if_block1) {
+    				if_block1.d(1);
+    				if_block1 = null;
     			}
     		},
     		i: noop,
     		o: noop,
     		d(detaching) {
     			if (detaching) detach(div);
-    			if (if_block) if_block.d();
+    			if_block0.d();
+    			if (if_block1) if_block1.d();
     			mounted = false;
     			run_all(dispose);
     		}
     	};
     }
 
-    function instance$4($$self, $$props, $$invalidate) {
+    function instance$5($$self, $$props, $$invalidate) {
     	let $location;
-    	component_subscribe($$self, location, $$value => $$invalidate(1, $location = $$value));
+    	let $asyncComponentLoaded;
+    	component_subscribe($$self, location, $$value => $$invalidate(2, $location = $$value));
+    	component_subscribe($$self, asyncComponentLoaded, $$value => $$invalidate(1, $asyncComponentLoaded = $$value));
     	let historyLength = window.history.length;
     	const click_handler = () => pop("bye!");
 
     	$$self.$$.update = () => {
-    		if ($$self.$$.dirty & /*$location*/ 2) {
+    		if ($$self.$$.dirty & /*$location*/ 4) {
     			 ($$invalidate(0, historyLength = window.history.length));
     		}
     	};
 
-    	return [historyLength, $location, click_handler];
+    	return [historyLength, $asyncComponentLoaded, $location, click_handler];
     }
 
     class Links extends SvelteComponent {
     	constructor(options) {
     		super();
-    		init(this, options, instance$4, create_fragment$6, safe_not_equal, {});
+    		init(this, options, instance$5, create_fragment$8, safe_not_equal, {});
     	}
     }
 
@@ -2549,15 +2801,15 @@ var StackRouter = (function () {
 
     function get_each_context$2(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[5] = list[i].label;
-    	child_ctx[7] = i;
+    	child_ctx[8] = list[i].label;
+    	child_ctx[10] = i;
     	return child_ctx;
     }
 
     // (32:4) {#each transitions as { label }
     function create_each_block$2(ctx) {
     	let option;
-    	let t_value = /*label*/ ctx[5] + "";
+    	let t_value = /*label*/ ctx[8] + "";
     	let t;
     	let option_value_value;
 
@@ -2565,7 +2817,7 @@ var StackRouter = (function () {
     		c() {
     			option = element("option");
     			t = text(t_value);
-    			option.__value = option_value_value = /*i*/ ctx[7];
+    			option.__value = option_value_value = /*i*/ ctx[10];
     			option.value = option.__value;
     		},
     		m(target, anchor) {
@@ -2579,25 +2831,30 @@ var StackRouter = (function () {
     	};
     }
 
-    function create_fragment$7(ctx) {
-    	let div2;
+    function create_fragment$9(ctx) {
+    	let div3;
     	let div0;
     	let h2;
     	let t0;
     	let t1;
     	let t2;
     	let div1;
-    	let label;
+    	let label0;
     	let t3;
     	let select;
     	let t4;
-    	let links;
+    	let div2;
+    	let label1;
     	let t5;
+    	let input;
+    	let t6;
+    	let links;
+    	let t7;
     	let stackrouter;
     	let current;
     	let mounted;
     	let dispose;
-    	let each_value = /*transitions*/ ctx[3];
+    	let each_value = /*transitions*/ ctx[4];
     	let each_blocks = [];
 
     	for (let i = 0; i < each_value.length; i += 1) {
@@ -2616,17 +2873,18 @@ var StackRouter = (function () {
     	stackrouter.$on("navigation-end", console.log);
     	stackrouter.$on("navigation-start", console.log);
     	stackrouter.$on("error", console.error);
+    	stackrouter.$on("forbidden", /*handleForbidden*/ ctx[5]);
 
     	return {
     		c() {
-    			div2 = element("div");
+    			div3 = element("div");
     			div0 = element("div");
     			h2 = element("h2");
     			t0 = text("Location pathname: ");
     			t1 = text(/*$pathname*/ ctx[2]);
     			t2 = space();
     			div1 = element("div");
-    			label = element("label");
+    			label0 = element("label");
     			t3 = text("Transition:\n\t\t\t");
     			select = element("select");
 
@@ -2635,48 +2893,65 @@ var StackRouter = (function () {
     			}
 
     			t4 = space();
+    			div2 = element("div");
+    			label1 = element("label");
+    			t5 = text("Enable guarded route:\n\t\t\t");
+    			input = element("input");
+    			t6 = space();
     			create_component(links.$$.fragment);
-    			t5 = space();
+    			t7 = space();
     			create_component(stackrouter.$$.fragment);
     			set_style(div0, "text-align", "center");
-    			if (/*transitionIndex*/ ctx[0] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[4].call(select));
+    			if (/*transitionIndex*/ ctx[0] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[6].call(select));
     			set_style(div1, "text-align", "center");
-    			set_style(div2, "padding", "10px");
-    			set_style(div2, "overflow", "hidden");
+    			attr(input, "type", "checkbox");
+    			set_style(div2, "text-align", "center");
+    			set_style(div3, "padding", "10px");
+    			set_style(div3, "overflow", "hidden");
     		},
     		m(target, anchor) {
-    			insert(target, div2, anchor);
-    			append(div2, div0);
+    			insert(target, div3, anchor);
+    			append(div3, div0);
     			append(div0, h2);
     			append(h2, t0);
     			append(h2, t1);
-    			append(div2, t2);
-    			append(div2, div1);
-    			append(div1, label);
-    			append(label, t3);
-    			append(label, select);
+    			append(div3, t2);
+    			append(div3, div1);
+    			append(div1, label0);
+    			append(label0, t3);
+    			append(label0, select);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].m(select, null);
     			}
 
     			select_option(select, /*transitionIndex*/ ctx[0]);
-    			append(div2, t4);
-    			mount_component(links, div2, null);
-    			append(div2, t5);
-    			mount_component(stackrouter, div2, null);
+    			append(div3, t4);
+    			append(div3, div2);
+    			append(div2, label1);
+    			append(label1, t5);
+    			append(label1, input);
+    			input.checked = /*$youShallPass*/ ctx[3];
+    			append(div3, t6);
+    			mount_component(links, div3, null);
+    			append(div3, t7);
+    			mount_component(stackrouter, div3, null);
     			current = true;
 
     			if (!mounted) {
-    				dispose = listen(select, "change", /*select_change_handler*/ ctx[4]);
+    				dispose = [
+    					listen(select, "change", /*select_change_handler*/ ctx[6]),
+    					listen(input, "change", /*input_change_handler*/ ctx[7])
+    				];
+
     				mounted = true;
     			}
     		},
     		p(ctx, [dirty]) {
     			if (!current || dirty & /*$pathname*/ 4) set_data(t1, /*$pathname*/ ctx[2]);
 
-    			if (dirty & /*transitions*/ 8) {
-    				each_value = /*transitions*/ ctx[3];
+    			if (dirty & /*transitions*/ 16) {
+    				each_value = /*transitions*/ ctx[4];
     				let i;
 
     				for (i = 0; i < each_value.length; i += 1) {
@@ -2702,6 +2977,10 @@ var StackRouter = (function () {
     				select_option(select, /*transitionIndex*/ ctx[0]);
     			}
 
+    			if (dirty & /*$youShallPass*/ 8) {
+    				input.checked = /*$youShallPass*/ ctx[3];
+    			}
+
     			const stackrouter_changes = {};
     			if (dirty & /*transition*/ 2) stackrouter_changes.transitionFn = /*transition*/ ctx[1].fn;
     			stackrouter.$set(stackrouter_changes);
@@ -2718,19 +2997,21 @@ var StackRouter = (function () {
     			current = false;
     		},
     		d(detaching) {
-    			if (detaching) detach(div2);
+    			if (detaching) detach(div3);
     			destroy_each(each_blocks, detaching);
     			destroy_component(links);
     			destroy_component(stackrouter);
     			mounted = false;
-    			dispose();
+    			run_all(dispose);
     		}
     	};
     }
 
-    function instance$5($$self, $$props, $$invalidate) {
+    function instance$6($$self, $$props, $$invalidate) {
     	let $pathname;
+    	let $youShallPass;
     	component_subscribe($$self, pathname, $$value => $$invalidate(2, $pathname = $$value));
+    	component_subscribe($$self, youShallPass, $$value => $$invalidate(3, $youShallPass = $$value));
 
     	let transitions = [
     		{ label: "dive", fn: dive(300) },
@@ -2741,9 +3022,19 @@ var StackRouter = (function () {
     	let transitionIndex = 0;
     	let transition = transitions[transitionIndex];
 
+    	function handleForbidden({ detail }) {
+    		alert(`Access forbidden to ${detail.location}`);
+    		push("/");
+    	}
+
     	function select_change_handler() {
     		transitionIndex = select_value(this);
     		$$invalidate(0, transitionIndex);
+    	}
+
+    	function input_change_handler() {
+    		$youShallPass = this.checked;
+    		youShallPass.set($youShallPass);
     	}
 
     	$$self.$$.update = () => {
@@ -2752,19 +3043,28 @@ var StackRouter = (function () {
     		}
     	};
 
-    	return [transitionIndex, transition, $pathname, transitions, select_change_handler];
+    	return [
+    		transitionIndex,
+    		transition,
+    		$pathname,
+    		$youShallPass,
+    		transitions,
+    		handleForbidden,
+    		select_change_handler,
+    		input_change_handler
+    	];
     }
 
     class Layout extends SvelteComponent {
     	constructor(options) {
     		super();
-    		init(this, options, instance$5, create_fragment$7, safe_not_equal, {});
+    		init(this, options, instance$6, create_fragment$9, safe_not_equal, {});
     	}
     }
 
     /* src/App.svelte generated by Svelte v3.38.2 */
 
-    function create_fragment$8(ctx) {
+    function create_fragment$a(ctx) {
     	let layout;
     	let current;
     	layout = new Layout({});
@@ -2796,7 +3096,7 @@ var StackRouter = (function () {
     class App extends SvelteComponent {
     	constructor(options) {
     		super();
-    		init(this, options, null, create_fragment$8, safe_not_equal, {});
+    		init(this, options, null, create_fragment$a, safe_not_equal, {});
     	}
     }
 
