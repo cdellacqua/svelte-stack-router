@@ -96,8 +96,7 @@
 	>
 		<input
 			type="checkbox"
-			checked={wait1s}
-			on:change={({ target }) => (wait1s = target.checked)}
+			bind:checked={wait1s}
 		/>
 		Return a promise when unloading
 	</label>

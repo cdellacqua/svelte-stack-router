@@ -15,6 +15,7 @@ import {
 	LoadableEntryAction,
 	UnloadableEntryAction,
 	Routes,
+	Params,
 } from './types';
 import { dispatchCustomEvent, sleep } from './utils';
 
@@ -112,13 +113,13 @@ async function waitForHistoryState(callback: () => void): Promise<void> {
 	}
 }
 
-function buildParams(pathname: string, routeKey: string): Record<string, string | null> | undefined {
+function buildParams(pathname: string, routeKey: string): Params | undefined {
 	const { pattern, keys } = regexparam(routeKey);
 	const matches = pattern.exec(pathname) || [];
 	const params = keys.reduce((params, _, index) => {
 		params[keys[index]] = matches[index + 1] === undefined ? null : decodeURIComponent(matches[index + 1]);
 		return params;
-	}, {} as Record<string, string | null>);
+	}, {} as Params);
 	return Object.keys(params).length === 0 ? undefined : params;
 }
 
@@ -194,16 +195,39 @@ export function handleStackRouterComponentDestroy(): void {
 }
 
 let editableEntryConfig: ComponentConfig | null = null;
-async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string): Promise<CacheEntry | CacheEntry | null> {
+async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string): Promise<CacheEntry | { message: string, params?: Params, err?: Error }> {
 	const routeKeys = Object.keys(config.routes);
 	const routeKey = routeKeys.find((routeKey) => {
 		const { pattern } = regexparam(routeKey);
 		return pattern.test(pathname);
 	});
 	if (routeKey === undefined || routeKey === null) {
-		return null;
+		return {
+			message: 'no route found',
+		};
 	}
 	const params = buildParams(pathname, routeKey);
+
+	// Check guards before updating params
+	const guards = config.routes[routeKey].guards
+		|| (config.routes[routeKey].guard && [config.routes[routeKey].guard])
+		|| [];
+	for (const guard of guards) {
+		try {
+			if (!await guard(params)) {
+				return {
+					message: 'access forbidden by guard',
+					params,
+				};
+			}
+		} catch (err) {
+			return {
+				message: 'guard error',
+				params,
+				err,
+			};
+		}
+	}
 
 	const resumableEntry = cache.find(
 		(s) => s.routeMatch === routeKey,
@@ -224,9 +248,32 @@ async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string
 		editableEntryConfig = {
 			resumable: config.defaultResumable,
 		};
+		let component;
+
+		if (typeof config.routes[routeKey] !== 'object') {
+			component = config.routes[routeKey];
+		} else if (config.routes[routeKey].component) {
+			component = config.routes[routeKey].component;
+		} else if (config.routes[routeKey].componentProvider) {
+			try {
+				const resolved = await config.routes[routeKey].componentProvider();
+				component = resolved.default || resolved;
+
+				// Cache the promise result so that it will be available in the future
+				// without having to call the provider again
+				config.routes[routeKey].component = component;
+			} catch (err) {
+				return {
+					message: 'unable to get component from provider',
+					err,
+				};
+			}
+		}
+
 		entry = {
-			component: config.routes[routeKey],
-			componentInstance: new config.routes[routeKey]({ target: mountPoint, props: { params } }),
+			component,
+			// eslint-disable-next-line new-cap
+			componentInstance: new component({ target: mountPoint, props: { params } }),
 			mountPoint,
 			pathname,
 			routeMatch: routeKey,
@@ -253,14 +300,25 @@ async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
 		await waitForHistoryState(() => window.history.replaceState(historyItem.state, '', (config.useHash ? '#' : '') + historyItem.location));
 	}
 
-	const pageToLoad = await prepareCacheEntryToActivate(currentCache, getPathname(historyItem.location));
-	if (!pageToLoad) {
-		config.dispatch?.('error', {
-			message: 'no route found',
-			location: historyItem.location,
-		});
+	const pageToLoadResult = await prepareCacheEntryToActivate(currentCache, getPathname(historyItem.location));
+	if ('message' in pageToLoadResult) {
+		switch (pageToLoadResult.message) {
+			case 'access forbidden by guard':
+				config.dispatch?.('forbidden', {
+					...pageToLoadResult,
+					location: historyItem.location,
+				});
+				break;
+			default:
+				config.dispatch?.('error', {
+					...pageToLoadResult,
+					location: historyItem.location,
+				});
+				break;
+		}
 		return;
 	}
+	const pageToLoad: CacheEntry = pageToLoadResult;
 	const pageToUnload = activeCacheEntry;
 	const newTopIndexInCurrentStack = currentCache.findIndex((s) => s.routeMatch === pageToLoad.routeMatch);
 
