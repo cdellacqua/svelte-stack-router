@@ -1315,7 +1315,11 @@ var StackRouter = (function () {
                         scroll: historyItem.state.scroll || { x: 0, y: 0 },
                     });
                     if (oldTopMountPoint) {
-                        config.mountPoint.removeChild(oldTopMountPoint);
+                        // Prevents race conditions caused by the router unmounting and
+                        // remounting while performing the animation
+                        if (config.mountPoint === oldTopMountPoint.parentElement) {
+                            config.mountPoint.removeChild(oldTopMountPoint);
+                        }
                     }
                 }
             }
