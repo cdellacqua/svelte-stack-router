@@ -159,6 +159,17 @@ export function handleStackRouterComponentMount(initConfig: Partial<Config> & { 
 
 	const firstRun = true;
 	let previousState: HistoryState | null = null;
+
+	// Preemptive cleanup in case there was a race condition during unmount
+	// eslint-disable-next-line no-use-before-define
+	activeCacheEntry = null;
+	internalCache.update(($cache) => {
+		$cache.forEach((entry) => {
+			entry.componentInstance.$destroy();
+		});
+		return [];
+	});
+
 	locationSubscription = location
 		.subscribe(
 			async ($location) => {
@@ -188,7 +199,14 @@ export function handleStackRouterComponentMount(initConfig: Partial<Config> & { 
 
 export function handleStackRouterComponentDestroy(): void {
 	locationSubscription();
-	internalCache.set([]);
+	// eslint-disable-next-line no-use-before-define
+	activeCacheEntry = null;
+	internalCache.update(($cache) => {
+		$cache.forEach((entry) => {
+			entry.componentInstance.$destroy();
+		});
+		return [];
+	});
 	locationSubscription = noop;
 	config.mountPoint = null;
 	config.dispatch = null;
