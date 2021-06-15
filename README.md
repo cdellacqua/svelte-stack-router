@@ -73,6 +73,24 @@ If you have a component which shouldn't be paused or resumed by the StackRouter,
 
 Doing this will make your component disposable, so that it will be mounted and destroyed and never paused or resumed.
 
+### Notes on StackRouter destruction
+
+When the `<StackRouter />` components gets unmounted (e.g. if it is inside an `{#if ...}`), all the components that were previously cached by it 
+will be destroyed. In particular, if the currently active component has registered any `onBeforeUnload`, `onPause` or `onAfterUnload` callbacks, those
+will get executed before the destruction of the component with a boolean parameter set to `true` to signal the urgency to clean up.
+
+```svelte
+<script>
+	onAfterUnload((force) => {
+		if (force) {
+			// non interactive operations
+		} else {
+			// asks for a user interaction (e.g. confirmation modal)
+		}
+	});
+</script>
+```
+
 ## Router events
 
 You can listen for the following events:
@@ -153,6 +171,28 @@ For example:
 - the user clicks on the `Add` button, thus navigating to `/new`, a page with a form where they can POST a new item to the list
 - the user submits the form and, in the submit handler, `pop` is called with the `id` of the newly created entity
 - the user gets brought back to `/selection`, which, being resumable, can handle the return value in its `onResume` callback(s) and show the selection on the newly created entity
+
+For example:
+- Selection page
+	```svelte
+	<script>
+		onResume((newElementId) => {
+			// handle newElementId
+		})
+	</script>
+	```
+- Add page
+	```svelte
+	<script>
+		async function add() {
+			const newElementId = await axios.post('/some-endpoint', {
+				// data
+			});
+			pop(newElementId);
+		}
+	</script>
+	```
+You can look at an actual implementation in the live demo source code.
 
 
 ## Customizing behavior

@@ -4,7 +4,7 @@
 	import {
 		handleStackRouterComponentMount,
 		handleStackRouterComponentDestroy,
-		updateConfig,
+		handleUpdateConfig,
 	} from "./stack-router";
 	import { dive } from "./transition-functions.js";
 
@@ -41,7 +41,7 @@
 		restoreScroll,
 		transitionFn,
 		routes,
-		updateConfig({
+		handleUpdateConfig({
 			routes,
 			defaultResumable,
 			useHash,
