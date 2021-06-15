@@ -16,6 +16,8 @@ import {
 	UnloadableEntryAction,
 	Routes,
 	Params,
+	StackRouterEvent,
+	StackRouterEventType,
 } from './types';
 import { dispatchCustomEvent, sleep } from './utils';
 
@@ -123,17 +125,36 @@ function buildParams(pathname: string, routeKey: string): Params | undefined {
 	return Object.keys(params).length === 0 ? undefined : params;
 }
 
-/* LOCATION UPDATE CONSUMER */
-const historyItemsQueue: HistoryItem[] = [];
+/* EVENT-BASED EXECUTION */
+const eventQueue: StackRouterEvent[] = [];
+function enqueueEvent(event: StackRouterEvent): void {
+	eventQueue.push(event);
+	consumeQueue();
+}
+
 let consumingQueue = false;
 async function consumeQueue(): Promise<void> {
 	if (consumingQueue) {
 		return;
 	}
 	consumingQueue = true;
-	while (historyItemsQueue.length > 0) {
-		const item = historyItemsQueue.shift()!;
-		await handleHistoryChange(item);
+	while (eventQueue.length > 0) {
+		const item = eventQueue.shift()!;
+		switch (item.type) {
+			case StackRouterEventType.Navigate:
+				await handleHistoryChange(item.payload);
+				break;
+			case StackRouterEventType.Mount:
+				await mount(item.payload);
+				break;
+			case StackRouterEventType.Destroy:
+				await destroy();
+				break;
+			case StackRouterEventType.UpdateConfig:
+				await updateConfig(item.payload);
+				break;
+			// no default
+		}
 	}
 	consumingQueue = false;
 }
@@ -141,7 +162,14 @@ async function consumeQueue(): Promise<void> {
 /* INIT & DESTROY */
 let locationSubscription = noop;
 
-export function updateConfig(initConfig: Partial<Omit<Config, 'mountPoint'>> & { routes: Routes }): void {
+export function handleUpdateConfig(initConfig: Partial<Omit<Config, 'mountPoint'>> & { routes: Routes }): void {
+	enqueueEvent({
+		type: StackRouterEventType.UpdateConfig,
+		payload: initConfig,
+	});
+}
+
+function updateConfig(initConfig: Partial<Omit<Config, 'mountPoint'>> & { routes: Routes }): void {
 	(Object.keys(initConfig) as (keyof Omit<Config, 'mountPoint'>)[])
 		.forEach((key) => {
 			if (initConfig[key] !== undefined) {
@@ -155,20 +183,17 @@ export function updateConfig(initConfig: Partial<Omit<Config, 'mountPoint'>> & {
 }
 
 export function handleStackRouterComponentMount(initConfig: Partial<Config> & { routes: Routes, mountPoint: HTMLDivElement }): void {
+	enqueueEvent({
+		type: StackRouterEventType.Mount,
+		payload: initConfig,
+	});
+}
+
+function mount(initConfig: Partial<Config> & { routes: Routes, mountPoint: HTMLDivElement }) {
 	updateConfig(initConfig);
 
 	const firstRun = true;
 	let previousState: HistoryState | null = null;
-
-	// Preemptive cleanup in case there was a race condition during unmount
-	// eslint-disable-next-line no-use-before-define
-	activeCacheEntry = null;
-	internalCache.update(($cache) => {
-		$cache.forEach((entry) => {
-			entry.componentInstance.$destroy();
-		});
-		return [];
-	});
 
 	locationSubscription = location
 		.subscribe(
@@ -187,26 +212,51 @@ export function handleStackRouterComponentMount(initConfig: Partial<Config> & { 
 						console.warn('unable to detect history change');
 					}
 				}
-				historyItemsQueue.push({
-					location: $location,
-					state: currentState,
+				enqueueEvent({
+					type: StackRouterEventType.Navigate,
+					payload: {
+						location: $location,
+						state: currentState,
+					},
 				});
 				previousState = currentState;
-				consumeQueue();
 			},
 		);
 }
 
 export function handleStackRouterComponentDestroy(): void {
+	enqueueEvent({
+		type: StackRouterEventType.Destroy,
+	});
+}
+
+async function destroy() {
 	locationSubscription();
+	const currentCache = get(internalCache);
+	for (const entry of currentCache) {
+		// eslint-disable-next-line no-use-before-define
+		if (entry === activeCacheEntry) {
+			if (entry.entryConfig.onBeforeUnload && entry.entryConfig.onBeforeUnload.length > 0) {
+				for (const callback of entry.entryConfig.onBeforeUnload) {
+					await callback(true);
+				}
+			}
+			if (entry.entryConfig.resumable && entry.entryConfig.onPause && entry.entryConfig.onPause.length > 0) {
+				for (const callback of entry.entryConfig.onPause) {
+					await callback(true);
+				}
+			}
+			if (entry.entryConfig.onAfterUnload && entry.entryConfig.onAfterUnload.length > 0) {
+				for (const callback of entry.entryConfig.onAfterUnload) {
+					await callback(true);
+				}
+			}
+		}
+		entry.componentInstance.$destroy();
+	}
 	// eslint-disable-next-line no-use-before-define
 	activeCacheEntry = null;
-	internalCache.update(($cache) => {
-		$cache.forEach((entry) => {
-			entry.componentInstance.$destroy();
-		});
-		return [];
-	});
+	internalCache.set([]);
 	locationSubscription = noop;
 	config.mountPoint = null;
 	config.dispatch = null;
@@ -463,11 +513,7 @@ async function handleHistoryChange(historyItem: HistoryItem): Promise<void> {
 				});
 
 				if (oldTopMountPoint) {
-					// Prevents race conditions caused by the router unmounting and
-					// remounting while performing the animation
-					if (config.mountPoint === oldTopMountPoint.parentElement) {
-						config.mountPoint.removeChild(oldTopMountPoint);
-					}
+					config.mountPoint.removeChild(oldTopMountPoint);
 				}
 			}
 		}
@@ -546,8 +592,8 @@ export async function replace(location: string, state?: HistoryState): Promise<v
 			...(state || {}),
 			timestamp: lastHistoryTimestamp,
 		},
-		'',
-		(config.useHash ? '#' : '') + location);
+			'',
+			(config.useHash ? '#' : '') + location);
 	});
 
 	dispatchCustomEvent(window as any, 'popstate');

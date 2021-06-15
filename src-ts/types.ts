@@ -78,17 +78,37 @@ export interface Config {
 	dispatch: ((eventName: string, eventData?: Record<any, any>) => void) | null,
 }
 
+export enum StackRouterEventType {
+	Navigate,
+	Mount,
+	Destroy,
+	UpdateConfig,
+}
+
+export type StackRouterEvent = {
+	type: StackRouterEventType.Mount,
+	payload: Partial<Config> & { routes: Routes, mountPoint: HTMLDivElement },
+} | {
+	type: StackRouterEventType.Destroy,
+} | {
+	type: StackRouterEventType.Navigate,
+	payload: HistoryItem,
+} | {
+	type: StackRouterEventType.UpdateConfig,
+	payload: Partial<Omit<Config, 'mountPoint'>> & { routes: Routes },
+};
+
 export type Params = Record<string, string | null>;
 
 export type Guard = (params?: Params) => boolean | Promise<boolean>;
 
 export interface ComponentConfig {
 	onResume?: ((returnValue: any) => any)[],
-	onPause?: (() => any)[],
-	onBeforeUnload?: (() => any)[],
+	onPause?: ((force?: boolean) => any)[],
+	onBeforeUnload?: ((force?: boolean) => any)[],
 	onAfterLoad?: (() => any)[],
 	onBeforeLoad?: (() => any)[],
-	onAfterUnload?: (() => any)[],
+	onAfterUnload?: ((force?: boolean) => any)[],
 	resumable: boolean,
 }
 

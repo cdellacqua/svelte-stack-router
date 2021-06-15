@@ -69,7 +69,8 @@
 		events = [...events, "onAfterUnload"];
 	});
 	onDestroy(() => {
-		// This won't get called
+		// This won't get called unless the entire StackRouter gets unmounted
+		console.log("Resumable destroyed!");
 		events = [...events, "onDestroy"];
 	});
 
@@ -94,10 +95,7 @@
 	<label
 		style="background-color: black; padding: 10px; display: inline-block; border-radius: 100px"
 	>
-		<input
-			type="checkbox"
-			bind:checked={wait1s}
-		/>
+		<input type="checkbox" bind:checked={wait1s} />
 		Return a promise when unloading
 	</label>
 </div>
