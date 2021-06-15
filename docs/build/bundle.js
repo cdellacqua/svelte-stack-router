@@ -787,6 +787,13 @@ var StackRouter = (function () {
         NavigationType[NavigationType["GoBackward"] = 2] = "GoBackward";
         NavigationType[NavigationType["Replace"] = 3] = "Replace";
     })(NavigationType || (NavigationType = {}));
+    var StackRouterEventType;
+    (function (StackRouterEventType) {
+        StackRouterEventType[StackRouterEventType["Navigate"] = 0] = "Navigate";
+        StackRouterEventType[StackRouterEventType["Mount"] = 1] = "Mount";
+        StackRouterEventType[StackRouterEventType["Destroy"] = 2] = "Destroy";
+        StackRouterEventType[StackRouterEventType["UpdateConfig"] = 3] = "UpdateConfig";
+    })(StackRouterEventType || (StackRouterEventType = {}));
 
     function animationFrame() {
         return new Promise((res) => requestAnimationFrame(() => res()));
@@ -1043,22 +1050,46 @@ var StackRouter = (function () {
         }, {});
         return Object.keys(params).length === 0 ? undefined : params;
     }
-    /* LOCATION UPDATE CONSUMER */
-    const historyItemsQueue = [];
+    /* EVENT-BASED EXECUTION */
+    const eventQueue = [];
+    function enqueueEvent(event) {
+        eventQueue.push(event);
+        consumeQueue();
+    }
     let consumingQueue = false;
     async function consumeQueue() {
         if (consumingQueue) {
             return;
         }
         consumingQueue = true;
-        while (historyItemsQueue.length > 0) {
-            const item = historyItemsQueue.shift();
-            await handleHistoryChange(item);
+        while (eventQueue.length > 0) {
+            const item = eventQueue.shift();
+            switch (item.type) {
+                case StackRouterEventType.Navigate:
+                    await handleHistoryChange(item.payload);
+                    break;
+                case StackRouterEventType.Mount:
+                    await mount(item.payload);
+                    break;
+                case StackRouterEventType.Destroy:
+                    await destroy();
+                    break;
+                case StackRouterEventType.UpdateConfig:
+                    await updateConfig(item.payload);
+                    break;
+                // no default
+            }
         }
         consumingQueue = false;
     }
     /* INIT & DESTROY */
     let locationSubscription = noop;
+    function handleUpdateConfig(initConfig) {
+        enqueueEvent({
+            type: StackRouterEventType.UpdateConfig,
+            payload: initConfig,
+        });
+    }
     function updateConfig(initConfig) {
         Object.keys(initConfig)
             .forEach((key) => {
@@ -1071,38 +1102,59 @@ var StackRouter = (function () {
         }
     }
     function handleStackRouterComponentMount(initConfig) {
-        updateConfig(initConfig);
-        // Preemptive cleanup in case there was a race condition during unmount
-        // eslint-disable-next-line no-use-before-define
-        activeCacheEntry = null;
-        internalCache.update(($cache) => {
-            $cache.forEach((entry) => {
-                entry.componentInstance.$destroy();
-            });
-            return [];
+        enqueueEvent({
+            type: StackRouterEventType.Mount,
+            payload: initConfig,
         });
+    }
+    function mount(initConfig) {
+        updateConfig(initConfig);
         locationSubscription = location
             .subscribe(async ($location) => {
             // Wait for history.state to pick the current state (without this sleep history.state can point to the previous state)
             // See https://developer.mozilla.org/en-US/docs/Web/API/Window/popstate_event
             let currentState = window.history.state;
-            historyItemsQueue.push({
-                location: $location,
-                state: currentState,
+            enqueueEvent({
+                type: StackRouterEventType.Navigate,
+                payload: {
+                    location: $location,
+                    state: currentState,
+                },
             });
-            consumeQueue();
         });
     }
     function handleStackRouterComponentDestroy() {
+        enqueueEvent({
+            type: StackRouterEventType.Destroy,
+        });
+    }
+    async function destroy() {
         locationSubscription();
+        const currentCache = get_store_value(internalCache);
+        for (const entry of currentCache) {
+            // eslint-disable-next-line no-use-before-define
+            if (entry === activeCacheEntry) {
+                if (entry.entryConfig.onBeforeUnload && entry.entryConfig.onBeforeUnload.length > 0) {
+                    for (const callback of entry.entryConfig.onBeforeUnload) {
+                        await callback(true);
+                    }
+                }
+                if (entry.entryConfig.resumable && entry.entryConfig.onPause && entry.entryConfig.onPause.length > 0) {
+                    for (const callback of entry.entryConfig.onPause) {
+                        await callback(true);
+                    }
+                }
+                if (entry.entryConfig.onAfterUnload && entry.entryConfig.onAfterUnload.length > 0) {
+                    for (const callback of entry.entryConfig.onAfterUnload) {
+                        await callback(true);
+                    }
+                }
+            }
+            entry.componentInstance.$destroy();
+        }
         // eslint-disable-next-line no-use-before-define
         activeCacheEntry = null;
-        internalCache.update(($cache) => {
-            $cache.forEach((entry) => {
-                entry.componentInstance.$destroy();
-            });
-            return [];
-        });
+        internalCache.set([]);
         locationSubscription = noop;
         config.mountPoint = null;
         config.dispatch = null;
@@ -1331,11 +1383,7 @@ var StackRouter = (function () {
                         scroll: historyItem.state.scroll || { x: 0, y: 0 },
                     });
                     if (oldTopMountPoint) {
-                        // Prevents race conditions caused by the router unmounting and
-                        // remounting while performing the animation
-                        if (config.mountPoint === oldTopMountPoint.parentElement) {
-                            config.mountPoint.removeChild(oldTopMountPoint);
-                        }
+                        config.mountPoint.removeChild(oldTopMountPoint);
                     }
                 }
             }
@@ -1673,7 +1721,7 @@ var StackRouter = (function () {
 
     	$$self.$$.update = () => {
     		if ($$self.$$.dirty & /*defaultResumable, useHash, restoreScroll, transitionFn, routes*/ 62) {
-    			 (updateConfig({
+    			 (handleUpdateConfig({
     				routes,
     				defaultResumable,
     				useHash,
@@ -1786,7 +1834,7 @@ var StackRouter = (function () {
     	return child_ctx;
     }
 
-    // (109:1) {#if params.aVariable}
+    // (107:1) {#if params.aVariable}
     function create_if_block(ctx) {
     	let p;
     	let t0;
@@ -1844,7 +1892,7 @@ var StackRouter = (function () {
     	};
     }
 
-    // (129:2) {#each events as event}
+    // (127:2) {#each events as event}
     function create_each_block(ctx) {
     	let li;
     	let t0_value = /*event*/ ctx[11] + "";
@@ -2143,7 +2191,9 @@ var StackRouter = (function () {
     	});
 
     	onDestroy(() => {
-    		// This won't get called
+    		// This won't get called unless the entire StackRouter gets unmounted
+    		console.log("Resumable destroyed!");
+
     		$$invalidate(1, events = [...events, "onDestroy"]);
     	});
 
@@ -2821,15 +2871,15 @@ var StackRouter = (function () {
 
     function get_each_context$2(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[8] = list[i].label;
-    	child_ctx[10] = i;
+    	child_ctx[10] = list[i].label;
+    	child_ctx[12] = i;
     	return child_ctx;
     }
 
-    // (32:4) {#each transitions as { label }
+    // (34:4) {#each transitions as { label }
     function create_each_block$2(ctx) {
     	let option;
-    	let t_value = /*label*/ ctx[8] + "";
+    	let t_value = /*label*/ ctx[10] + "";
     	let t;
     	let option_value_value;
 
@@ -2837,7 +2887,7 @@ var StackRouter = (function () {
     		c() {
     			option = element("option");
     			t = text(t_value);
-    			option.__value = option_value_value = /*i*/ ctx[10];
+    			option.__value = option_value_value = /*i*/ ctx[12];
     			option.value = option.__value;
     		},
     		m(target, anchor) {
@@ -2851,8 +2901,75 @@ var StackRouter = (function () {
     	};
     }
 
+    // (62:1) {:else}
+    function create_else_block$1(ctx) {
+    	let div;
+
+    	return {
+    		c() {
+    			div = element("div");
+    			div.textContent = "StackRouter unmounted, all cached components have been destroyed";
+    			set_style(div, "text-align", "center");
+    		},
+    		m(target, anchor) {
+    			insert(target, div, anchor);
+    		},
+    		p: noop,
+    		i: noop,
+    		o: noop,
+    		d(detaching) {
+    			if (detaching) detach(div);
+    		}
+    	};
+    }
+
+    // (53:1) {#if !unmount}
+    function create_if_block$2(ctx) {
+    	let stackrouter;
+    	let current;
+
+    	stackrouter = new StackRouter({
+    			props: {
+    				routes,
+    				transitionFn: /*transition*/ ctx[1].fn
+    			}
+    		});
+
+    	stackrouter.$on("navigation-end", console.log);
+    	stackrouter.$on("navigation-start", console.log);
+    	stackrouter.$on("error", console.error);
+    	stackrouter.$on("forbidden", /*handleForbidden*/ ctx[6]);
+
+    	return {
+    		c() {
+    			create_component(stackrouter.$$.fragment);
+    		},
+    		m(target, anchor) {
+    			mount_component(stackrouter, target, anchor);
+    			current = true;
+    		},
+    		p(ctx, dirty) {
+    			const stackrouter_changes = {};
+    			if (dirty & /*transition*/ 2) stackrouter_changes.transitionFn = /*transition*/ ctx[1].fn;
+    			stackrouter.$set(stackrouter_changes);
+    		},
+    		i(local) {
+    			if (current) return;
+    			transition_in(stackrouter.$$.fragment, local);
+    			current = true;
+    		},
+    		o(local) {
+    			transition_out(stackrouter.$$.fragment, local);
+    			current = false;
+    		},
+    		d(detaching) {
+    			destroy_component(stackrouter, detaching);
+    		}
+    	};
+    }
+
     function create_fragment$9(ctx) {
-    	let div3;
+    	let div4;
     	let div0;
     	let h2;
     	let t0;
@@ -2866,15 +2983,21 @@ var StackRouter = (function () {
     	let div2;
     	let label1;
     	let t5;
-    	let input;
+    	let input0;
     	let t6;
-    	let links;
+    	let div3;
+    	let label2;
     	let t7;
-    	let stackrouter;
+    	let input1;
+    	let t8;
+    	let links;
+    	let t9;
+    	let current_block_type_index;
+    	let if_block;
     	let current;
     	let mounted;
     	let dispose;
-    	let each_value = /*transitions*/ ctx[4];
+    	let each_value = /*transitions*/ ctx[5];
     	let each_blocks = [];
 
     	for (let i = 0; i < each_value.length; i += 1) {
@@ -2882,26 +3005,24 @@ var StackRouter = (function () {
     	}
 
     	links = new Links({});
+    	const if_block_creators = [create_if_block$2, create_else_block$1];
+    	const if_blocks = [];
 
-    	stackrouter = new StackRouter({
-    			props: {
-    				routes,
-    				transitionFn: /*transition*/ ctx[1].fn
-    			}
-    		});
+    	function select_block_type(ctx, dirty) {
+    		if (!/*unmount*/ ctx[2]) return 0;
+    		return 1;
+    	}
 
-    	stackrouter.$on("navigation-end", console.log);
-    	stackrouter.$on("navigation-start", console.log);
-    	stackrouter.$on("error", console.error);
-    	stackrouter.$on("forbidden", /*handleForbidden*/ ctx[5]);
+    	current_block_type_index = select_block_type(ctx);
+    	if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
 
     	return {
     		c() {
-    			div3 = element("div");
+    			div4 = element("div");
     			div0 = element("div");
     			h2 = element("h2");
     			t0 = text("Location pathname: ");
-    			t1 = text(/*$pathname*/ ctx[2]);
+    			t1 = text(/*$pathname*/ ctx[3]);
     			t2 = space();
     			div1 = element("div");
     			label0 = element("label");
@@ -2916,27 +3037,34 @@ var StackRouter = (function () {
     			div2 = element("div");
     			label1 = element("label");
     			t5 = text("Enable guarded route:\n\t\t\t");
-    			input = element("input");
+    			input0 = element("input");
     			t6 = space();
+    			div3 = element("div");
+    			label2 = element("label");
+    			t7 = text("Unmount stack router:\n\t\t\t");
+    			input1 = element("input");
+    			t8 = space();
     			create_component(links.$$.fragment);
-    			t7 = space();
-    			create_component(stackrouter.$$.fragment);
+    			t9 = space();
+    			if_block.c();
     			set_style(div0, "text-align", "center");
-    			if (/*transitionIndex*/ ctx[0] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[6].call(select));
+    			if (/*transitionIndex*/ ctx[0] === void 0) add_render_callback(() => /*select_change_handler*/ ctx[7].call(select));
     			set_style(div1, "text-align", "center");
-    			attr(input, "type", "checkbox");
+    			attr(input0, "type", "checkbox");
     			set_style(div2, "text-align", "center");
-    			set_style(div3, "padding", "10px");
-    			set_style(div3, "overflow", "hidden");
+    			attr(input1, "type", "checkbox");
+    			set_style(div3, "text-align", "center");
+    			set_style(div4, "padding", "10px");
+    			set_style(div4, "overflow", "hidden");
     		},
     		m(target, anchor) {
-    			insert(target, div3, anchor);
-    			append(div3, div0);
+    			insert(target, div4, anchor);
+    			append(div4, div0);
     			append(div0, h2);
     			append(h2, t0);
     			append(h2, t1);
-    			append(div3, t2);
-    			append(div3, div1);
+    			append(div4, t2);
+    			append(div4, div1);
     			append(div1, label0);
     			append(label0, t3);
     			append(label0, select);
@@ -2946,32 +3074,39 @@ var StackRouter = (function () {
     			}
 
     			select_option(select, /*transitionIndex*/ ctx[0]);
-    			append(div3, t4);
-    			append(div3, div2);
+    			append(div4, t4);
+    			append(div4, div2);
     			append(div2, label1);
     			append(label1, t5);
-    			append(label1, input);
-    			input.checked = /*$youShallPass*/ ctx[3];
-    			append(div3, t6);
-    			mount_component(links, div3, null);
-    			append(div3, t7);
-    			mount_component(stackrouter, div3, null);
+    			append(label1, input0);
+    			input0.checked = /*$youShallPass*/ ctx[4];
+    			append(div4, t6);
+    			append(div4, div3);
+    			append(div3, label2);
+    			append(label2, t7);
+    			append(label2, input1);
+    			input1.checked = /*unmount*/ ctx[2];
+    			append(div4, t8);
+    			mount_component(links, div4, null);
+    			append(div4, t9);
+    			if_blocks[current_block_type_index].m(div4, null);
     			current = true;
 
     			if (!mounted) {
     				dispose = [
-    					listen(select, "change", /*select_change_handler*/ ctx[6]),
-    					listen(input, "change", /*input_change_handler*/ ctx[7])
+    					listen(select, "change", /*select_change_handler*/ ctx[7]),
+    					listen(input0, "change", /*input0_change_handler*/ ctx[8]),
+    					listen(input1, "change", /*input1_change_handler*/ ctx[9])
     				];
 
     				mounted = true;
     			}
     		},
     		p(ctx, [dirty]) {
-    			if (!current || dirty & /*$pathname*/ 4) set_data(t1, /*$pathname*/ ctx[2]);
+    			if (!current || dirty & /*$pathname*/ 8) set_data(t1, /*$pathname*/ ctx[3]);
 
-    			if (dirty & /*transitions*/ 16) {
-    				each_value = /*transitions*/ ctx[4];
+    			if (dirty & /*transitions*/ 32) {
+    				each_value = /*transitions*/ ctx[5];
     				let i;
 
     				for (i = 0; i < each_value.length; i += 1) {
@@ -2997,30 +3132,56 @@ var StackRouter = (function () {
     				select_option(select, /*transitionIndex*/ ctx[0]);
     			}
 
-    			if (dirty & /*$youShallPass*/ 8) {
-    				input.checked = /*$youShallPass*/ ctx[3];
+    			if (dirty & /*$youShallPass*/ 16) {
+    				input0.checked = /*$youShallPass*/ ctx[4];
     			}
 
-    			const stackrouter_changes = {};
-    			if (dirty & /*transition*/ 2) stackrouter_changes.transitionFn = /*transition*/ ctx[1].fn;
-    			stackrouter.$set(stackrouter_changes);
+    			if (dirty & /*unmount*/ 4) {
+    				input1.checked = /*unmount*/ ctx[2];
+    			}
+
+    			let previous_block_index = current_block_type_index;
+    			current_block_type_index = select_block_type(ctx);
+
+    			if (current_block_type_index === previous_block_index) {
+    				if_blocks[current_block_type_index].p(ctx, dirty);
+    			} else {
+    				group_outros();
+
+    				transition_out(if_blocks[previous_block_index], 1, 1, () => {
+    					if_blocks[previous_block_index] = null;
+    				});
+
+    				check_outros();
+    				if_block = if_blocks[current_block_type_index];
+
+    				if (!if_block) {
+    					if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+    					if_block.c();
+    				} else {
+    					if_block.p(ctx, dirty);
+    				}
+
+    				transition_in(if_block, 1);
+    				if_block.m(div4, null);
+    			}
     		},
     		i(local) {
     			if (current) return;
     			transition_in(links.$$.fragment, local);
-    			transition_in(stackrouter.$$.fragment, local);
+    			transition_in(if_block);
     			current = true;
     		},
     		o(local) {
     			transition_out(links.$$.fragment, local);
-    			transition_out(stackrouter.$$.fragment, local);
+    			transition_out(if_block);
     			current = false;
     		},
     		d(detaching) {
-    			if (detaching) detach(div3);
+    			if (detaching) detach(div4);
     			destroy_each(each_blocks, detaching);
     			destroy_component(links);
-    			destroy_component(stackrouter);
+    			if_blocks[current_block_type_index].d();
     			mounted = false;
     			run_all(dispose);
     		}
@@ -3030,8 +3191,8 @@ var StackRouter = (function () {
     function instance$6($$self, $$props, $$invalidate) {
     	let $pathname;
     	let $youShallPass;
-    	component_subscribe($$self, pathname, $$value => $$invalidate(2, $pathname = $$value));
-    	component_subscribe($$self, youShallPass, $$value => $$invalidate(3, $youShallPass = $$value));
+    	component_subscribe($$self, pathname, $$value => $$invalidate(3, $pathname = $$value));
+    	component_subscribe($$self, youShallPass, $$value => $$invalidate(4, $youShallPass = $$value));
 
     	let transitions = [
     		{ label: "dive", fn: dive(300) },
@@ -3047,14 +3208,21 @@ var StackRouter = (function () {
     		push("/");
     	}
 
+    	let unmount = false;
+
     	function select_change_handler() {
     		transitionIndex = select_value(this);
     		$$invalidate(0, transitionIndex);
     	}
 
-    	function input_change_handler() {
+    	function input0_change_handler() {
     		$youShallPass = this.checked;
     		youShallPass.set($youShallPass);
+    	}
+
+    	function input1_change_handler() {
+    		unmount = this.checked;
+    		$$invalidate(2, unmount);
     	}
 
     	$$self.$$.update = () => {
@@ -3066,12 +3234,14 @@ var StackRouter = (function () {
     	return [
     		transitionIndex,
     		transition,
+    		unmount,
     		$pathname,
     		$youShallPass,
     		transitions,
     		handleForbidden,
     		select_change_handler,
-    		input_change_handler
+    		input0_change_handler,
+    		input1_change_handler
     	];
     }
 
