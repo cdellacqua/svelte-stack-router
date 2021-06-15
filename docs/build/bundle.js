@@ -1072,6 +1072,15 @@ var StackRouter = (function () {
     }
     function handleStackRouterComponentMount(initConfig) {
         updateConfig(initConfig);
+        // Preemptive cleanup in case there was a race condition during unmount
+        // eslint-disable-next-line no-use-before-define
+        activeCacheEntry = null;
+        internalCache.update(($cache) => {
+            $cache.forEach((entry) => {
+                entry.componentInstance.$destroy();
+            });
+            return [];
+        });
         locationSubscription = location
             .subscribe(async ($location) => {
             // Wait for history.state to pick the current state (without this sleep history.state can point to the previous state)
@@ -1086,7 +1095,14 @@ var StackRouter = (function () {
     }
     function handleStackRouterComponentDestroy() {
         locationSubscription();
-        internalCache.set([]);
+        // eslint-disable-next-line no-use-before-define
+        activeCacheEntry = null;
+        internalCache.update(($cache) => {
+            $cache.forEach((entry) => {
+                entry.componentInstance.$destroy();
+            });
+            return [];
+        });
         locationSubscription = noop;
         config.mountPoint = null;
         config.dispatch = null;
