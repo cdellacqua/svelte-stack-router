@@ -22,7 +22,7 @@ export class StackRouter extends SvelteComponent {
 		useHash: boolean,
 		/** Whether or not to restore the scroll position when navigating backwards */
 		restoreScroll: boolean,
-		/** A key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent */
+		/** A key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent constructor */
 		routes: Routes,
 		/** A function that handles the transition between two pages */
 		transitionFn: TransitionFunction,

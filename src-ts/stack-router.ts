@@ -1,5 +1,5 @@
 import regexparam from 'regexparam';
-import { tick } from 'svelte';
+import { SvelteComponent, tick } from 'svelte';
 import { noop } from 'svelte/internal';
 import {
 	readable, derived, writable, get,
@@ -19,6 +19,7 @@ import {
 	StackRouterEvent,
 	StackRouterEventType,
 	RouteDescriptor,
+	SvelteComponentConstructor,
 } from './types';
 import { dispatchCustomEvent, sleep } from './utils';
 
@@ -319,16 +320,17 @@ async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string
 		editableEntryConfig = {
 			resumable: config.defaultResumable,
 		};
-		let component;
+
+		let component: SvelteComponentConstructor;
 
 		if (typeof config.routes[routeKey] !== 'object') {
-			component = config.routes[routeKey];
+			component = config.routes[routeKey] as SvelteComponentConstructor;
 		} else if (routeDescriptor.component) {
 			component = routeDescriptor.component;
 		} else if (routeDescriptor.componentProvider) {
 			try {
 				const resolved = await routeDescriptor.componentProvider();
-				component = resolved.default || resolved;
+				component = (resolved as unknown as { default: SvelteComponentConstructor }).default || resolved;
 
 				// Cache the promise result so that it will be available in the future
 				// without having to call the provider again
@@ -339,6 +341,11 @@ async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string
 					err,
 				};
 			}
+		} else {
+			return {
+				message: 'unable to get a component constructor',
+				err: new Error('unable to get a component constructor'),
+			};
 		}
 
 		entry = {

@@ -205,7 +205,7 @@ The `<StackRouter>` component supports a variety of options:
 |useHash|boolean|whether or not to prefix routes with '#' to implement a server-agnostic client side routing (e.g. no need to redirect 404 to index)|true|
 |restoreScroll|boolean|whether or not to restore the scroll position when navigating backwards|true|
 |transitionFn|TransitionFunction|a function that handles the transition between two pages|dive(300)|
-|routes|Record.<string, SvelteComponent>|a key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent|N/A - **required**|
+|routes|Record.<string, SvelteComponentConstructor>|a key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent constructor|N/A - **required**|
 
 ## Advanced routing
 

@@ -1,8 +1,6 @@
 import { SvelteComponent } from 'svelte';
 
-export type SvelteComponentWithConstructor = SvelteComponent & {
-	new(options: { target: HTMLElement, props: Record<string, any> }): SvelteComponent,
-};
+export type SvelteComponentConstructor = new (options: { target: HTMLElement, props: Record<string, any> }) => SvelteComponent;
 
 export interface HistoryState {
 	timestamp: number,
@@ -66,11 +64,13 @@ export type Guard = (params?: Params) => boolean | Promise<boolean>;
 export interface RouteDescriptor {
 	guard?: Guard,
 	guards?: Guard[],
-	component?: SvelteComponent,
-	componentProvider?: () => Promise<SvelteComponent>
+	component?: SvelteComponentConstructor,
+	componentProvider?: () => Promise<SvelteComponentConstructor | {
+		default: SvelteComponentConstructor
+	}>
 }
 
-export type Routes = Record<string, SvelteComponentWithConstructor | RouteDescriptor>;
+export type Routes = Record<string, SvelteComponentConstructor | RouteDescriptor>;
 
 export interface Config {
 	/** Whether or not the default behavior should be to resume or recreate the components */
@@ -79,7 +79,7 @@ export interface Config {
 	useHash: boolean,
 	/** Whether or not to restore the scroll position when navigating backwards */
 	restoreScroll: boolean,
-	/** A key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent */
+	/** A key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent constructor */
 	routes: Routes,
 	/** Reference to the HTML element that will wrap all the page components */
 	mountPoint: null | HTMLElement,
@@ -120,7 +120,7 @@ export interface ComponentConfig {
 }
 
 export interface CacheEntry {
-	component: SvelteComponentWithConstructor,
+	component: SvelteComponentConstructor,
 	componentInstance: SvelteComponent,
 	pathname: string,
 	routeMatch: string,
