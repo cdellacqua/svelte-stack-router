@@ -18,6 +18,7 @@ import {
 	Params,
 	StackRouterEvent,
 	StackRouterEventType,
+	RouteDescriptor,
 } from './types';
 import { dispatchCustomEvent, sleep } from './utils';
 
@@ -276,9 +277,11 @@ async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string
 	}
 	const params = buildParams(pathname, routeKey);
 
+	const routeDescriptor = typeof config.routes[routeKey] === 'object' ? (config.routes[routeKey] as RouteDescriptor) : ({} as RouteDescriptor);
+
 	// Check guards before updating params
-	const guards = config.routes[routeKey].guards
-		|| (config.routes[routeKey].guard && [config.routes[routeKey].guard])
+	const guards = routeDescriptor.guards
+		|| (routeDescriptor.guard && [routeDescriptor.guard!])
 		|| [];
 	for (const guard of guards) {
 		try {
@@ -320,16 +323,16 @@ async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string
 
 		if (typeof config.routes[routeKey] !== 'object') {
 			component = config.routes[routeKey];
-		} else if (config.routes[routeKey].component) {
-			component = config.routes[routeKey].component;
-		} else if (config.routes[routeKey].componentProvider) {
+		} else if (routeDescriptor.component) {
+			component = routeDescriptor.component;
+		} else if (routeDescriptor.componentProvider) {
 			try {
-				const resolved = await config.routes[routeKey].componentProvider();
+				const resolved = await routeDescriptor.componentProvider();
 				component = resolved.default || resolved;
 
 				// Cache the promise result so that it will be available in the future
 				// without having to call the provider again
-				config.routes[routeKey].component = component;
+				routeDescriptor.component = component;
 			} catch (err) {
 				return {
 					message: 'unable to get component from provider',

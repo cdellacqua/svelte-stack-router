@@ -63,12 +63,14 @@ export type Params = Record<string, string | null>;
 
 export type Guard = (params?: Params) => boolean | Promise<boolean>;
 
-export type Routes = Record<string, SvelteComponentWithConstructor | {
+export interface RouteDescriptor {
 	guard?: Guard,
 	guards?: Guard[],
 	component?: SvelteComponent,
 	componentProvider?: () => Promise<SvelteComponent>
-}>;
+}
+
+export type Routes = Record<string, SvelteComponentWithConstructor | RouteDescriptor>;
 
 export interface Config {
 	/** Whether or not the default behavior should be to resume or recreate the components */
