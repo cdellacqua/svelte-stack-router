@@ -16,7 +16,7 @@
 	export let restoreScroll = true;
 	/** @type {import('../dist/types').TransitionFunction} a function that handles the transition between two pages */
 	export let transitionFn = dive(300);
-	/** @type {Record.<string, import('svelte').SvelteComponent>} a key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent */
+	/** @type {Record.<string, import('../dist/types').SvelteComponentConstructor>} a key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent constructor */
 	export let routes;
 
 	let dispatch = createEventDispatcher();

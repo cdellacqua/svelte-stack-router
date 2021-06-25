@@ -1,5 +1,5 @@
 import regexparam from 'regexparam';
-import { tick } from 'svelte';
+import { SvelteComponent, tick } from 'svelte';
 import { noop } from 'svelte/internal';
 import {
 	readable, derived, writable, get,
@@ -18,6 +18,8 @@ import {
 	Params,
 	StackRouterEvent,
 	StackRouterEventType,
+	RouteDescriptor,
+	SvelteComponentConstructor,
 } from './types';
 import { dispatchCustomEvent, sleep } from './utils';
 
@@ -276,9 +278,11 @@ async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string
 	}
 	const params = buildParams(pathname, routeKey);
 
+	const routeDescriptor = typeof config.routes[routeKey] === 'object' ? (config.routes[routeKey] as RouteDescriptor) : ({} as RouteDescriptor);
+
 	// Check guards before updating params
-	const guards = config.routes[routeKey].guards
-		|| (config.routes[routeKey].guard && [config.routes[routeKey].guard])
+	const guards = routeDescriptor.guards
+		|| (routeDescriptor.guard && [routeDescriptor.guard!])
 		|| [];
 	for (const guard of guards) {
 		try {
@@ -316,26 +320,32 @@ async function prepareCacheEntryToActivate(cache: CacheEntry[], pathname: string
 		editableEntryConfig = {
 			resumable: config.defaultResumable,
 		};
-		let component;
+
+		let component: SvelteComponentConstructor;
 
 		if (typeof config.routes[routeKey] !== 'object') {
-			component = config.routes[routeKey];
-		} else if (config.routes[routeKey].component) {
-			component = config.routes[routeKey].component;
-		} else if (config.routes[routeKey].componentProvider) {
+			component = config.routes[routeKey] as SvelteComponentConstructor;
+		} else if (routeDescriptor.component) {
+			component = routeDescriptor.component;
+		} else if (routeDescriptor.componentProvider) {
 			try {
-				const resolved = await config.routes[routeKey].componentProvider();
-				component = resolved.default || resolved;
+				const resolved = await routeDescriptor.componentProvider();
+				component = (resolved as unknown as { default: SvelteComponentConstructor }).default || resolved;
 
 				// Cache the promise result so that it will be available in the future
 				// without having to call the provider again
-				config.routes[routeKey].component = component;
+				routeDescriptor.component = component;
 			} catch (err) {
 				return {
 					message: 'unable to get component from provider',
 					err,
 				};
 			}
+		} else {
+			return {
+				message: 'unable to get a component constructor',
+				err: new Error('unable to get a component constructor'),
+			};
 		}
 
 		entry = {
