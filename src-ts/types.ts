@@ -1,8 +1,7 @@
 import { SvelteComponent } from 'svelte';
 
-export type SvelteComponentWithConstructor = SvelteComponent & {
-	new(options: { target: HTMLElement, props: Record<string, any> }): SvelteComponent,
-};
+export type SvelteComponentWithConstructor =
+	new(options: { target: HTMLElement, props: Record<string, any> }) => SvelteComponent;
 
 export interface HistoryState {
 	timestamp: number,
