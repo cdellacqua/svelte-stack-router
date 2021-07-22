@@ -1,6 +1,6 @@
 /* eslint-disable import/named */
 import type {
-	NavigationType, TransitionFunction, CacheEntry, PageToUnloadAction, PageToLoadAction, Routes,
+	NavigationType, TransitionFunction, CacheEntry, PageToUnloadAction, PageToLoadAction, Routes, Params
 } from './types';
 
 export * from './stack-router';
@@ -52,5 +52,12 @@ export class StackRouter extends SvelteComponent {
 		pageToUnload: CacheEntry | null,
 		pageToLoadAction: PageToLoadAction,
 		pageToUnloadAction: PageToUnloadAction,
+	}>) => any): () => void;
+
+	/** Triggered when a route couldn't be reached because a guard returned a falsy value */
+	$on(event: 'forbidden', handler: (e: CustomEvent<{
+		message: string,
+		params: Params,
+		location: string
 	}>) => any): () => void;
 }
