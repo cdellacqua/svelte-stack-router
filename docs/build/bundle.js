@@ -1091,10 +1091,7 @@ var StackRouter = (function () {
     }
     // Used in the `pop` function to prevent a double trigger of the PopStateEvent
     let ignorePopStateEvent = false;
-    /**
-     * Readable store representing the current location
-     */
-    const location = readable(getLocation(), (set) => {
+    const _location = writable(getLocation(), (set) => {
         let previousLocation = null;
         const handlePopState = async () => {
             if (ignorePopStateEvent) {
@@ -1111,6 +1108,10 @@ var StackRouter = (function () {
             window.removeEventListener('popstate', handlePopState);
         };
     });
+    /**
+     * Readable store representing the current location
+     */
+    const location = derived(_location, ($_location) => $_location);
     /* PATHNAME */
     function getPathname(location) {
         const queryStringPosition = location.indexOf('?');
@@ -1201,12 +1202,19 @@ var StackRouter = (function () {
         });
     }
     function updateConfig(initConfig) {
+        const previousUseHash = config.useHash;
         Object.keys(initConfig)
             .forEach((key) => {
             if (initConfig[key] !== undefined) {
                 config[key] = initConfig[key];
             }
         });
+        if (previousUseHash !== config.useHash) {
+            const currentLocation = getLocation();
+            if (get_store_value(_location) !== currentLocation) {
+                _location.set(currentLocation);
+            }
+        }
         if ('scrollRestoration' in window.history) {
             window.history.scrollRestoration = config.restoreScroll ? 'manual' : 'auto';
         }
