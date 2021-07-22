@@ -681,7 +681,7 @@ export async function pop(returnValue?: any): Promise<void> {
  * @param href the href attribute of the anchor tag
  * @returns an object containing the callback Svelte will use to trigger updates
  */
-export function link(node: HTMLAnchorElement, href?: string): { update: Function } {
+export function link(node: HTMLAnchorElement, href?: string): { update: (args: any) => void } {
 	if (!node || !node.tagName || node.tagName.toLowerCase() !== 'a') {
 		throw new Error('not a <a> tag');
 	}
