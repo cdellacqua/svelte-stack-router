@@ -51,10 +51,7 @@ function getLocation(): string {
 // Used in the `pop` function to prevent a double trigger of the PopStateEvent
 let ignorePopStateEvent = false;
 
-/**
- * Readable store representing the current location
- */
-export const location = readable(getLocation(), (set) => {
+const _location = writable(getLocation(), (set) => {
 	let previousLocation: string | null = null;
 	const handlePopState = async () => {
 		if (ignorePopStateEvent) {
@@ -71,6 +68,11 @@ export const location = readable(getLocation(), (set) => {
 		window.removeEventListener('popstate', handlePopState);
 	};
 });
+
+/**
+ * Readable store representing the current location
+ */
+export const location = derived(_location, ($_location) => $_location);
 
 /* PATHNAME */
 function getPathname(location: string): string {
@@ -172,12 +174,21 @@ export function handleUpdateConfig(initConfig: Partial<Omit<Config, 'mountPoint'
 }
 
 function updateConfig(initConfig: Partial<Omit<Config, 'mountPoint'>> & { routes: Routes }): void {
+	const previousUseHash = config.useHash;
+
 	(Object.keys(initConfig) as (keyof Omit<Config, 'mountPoint'>)[])
 		.forEach((key) => {
 			if (initConfig[key] !== undefined) {
 				config[key] = initConfig[key] as any;
 			}
 		});
+
+	if (previousUseHash !== config.useHash) {
+		const currentLocation = getLocation();
+		if (get(_location) !== currentLocation) {
+			_location.set(currentLocation);
+		}
+	}
 
 	if ('scrollRestoration' in window.history) {
 		window.history.scrollRestoration = config.restoreScroll ? 'manual' : 'auto';
