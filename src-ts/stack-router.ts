@@ -681,7 +681,7 @@ export async function pop(returnValue?: any): Promise<void> {
  * @param href the href attribute of the anchor tag
  * @returns an object containing the callback Svelte will use to trigger updates
  */
-export function link(node: HTMLAnchorElement, href?: string): { update: Function } {
+export function link(node: HTMLAnchorElement, href?: string): { update: (args: any) => void } {
 	if (!node || !node.tagName || node.tagName.toLowerCase() !== 'a') {
 		throw new Error('not a <a> tag');
 	}
@@ -729,7 +729,7 @@ const lifecycleErrorText = 'lifecycle functions can only be'
  * - destroy previous component if not resumable
  * @param callback function that will be called when the component is resumed
  */
-export function onResume(callback: () => any): void {
+export function onResume(callback: (returnValue?: any) => any): void {
 	if (!editableEntryConfig) {
 		throw new Error(lifecycleErrorText);
 	}
