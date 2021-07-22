@@ -110,7 +110,7 @@ export type StackRouterEvent = {
 };
 
 export interface ComponentConfig {
-	onResume?: ((returnValue: any) => any)[],
+	onResume?: ((returnValue?: any) => any)[],
 	onPause?: ((force?: boolean) => any)[],
 	onBeforeUnload?: ((force?: boolean) => any)[],
 	onAfterLoad?: (() => any)[],

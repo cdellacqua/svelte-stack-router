@@ -729,7 +729,7 @@ const lifecycleErrorText = 'lifecycle functions can only be'
  * - destroy previous component if not resumable
  * @param callback function that will be called when the component is resumed
  */
-export function onResume(callback: () => any): void {
+export function onResume(callback: (returnValue?: any) => any): void {
 	if (!editableEntryConfig) {
 		throw new Error(lifecycleErrorText);
 	}
