@@ -17,15 +17,15 @@ export class SvelteComponent {
 export class StackRouter extends SvelteComponent {
 	$$prop_def: {
 		/** Whether or not the default behavior should be to resume or recreate the components */
-		defaultResumable: boolean,
+		defaultResumable?: boolean,
 		/** Whether or not to prefix routes with '#' to implement a server-agnostic client side routing (e.g. no need to redirect 404 to index) */
-		useHash: boolean,
+		useHash?: boolean,
 		/** Whether or not to restore the scroll position when navigating backwards */
-		restoreScroll: boolean,
+		restoreScroll?: boolean,
 		/** A key-value object associating a route path (e.g. '/a/route/path/:variable1?) to a SvelteComponent constructor */
 		routes: Routes,
 		/** A function that handles the transition between two pages */
-		transitionFn: TransitionFunction,
+		transitionFn?: TransitionFunction,
 	}
 
 	/** Triggered on errors such as "no route found" */
