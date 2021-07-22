@@ -57,7 +57,7 @@ export class StackRouter extends SvelteComponent {
 	/** Triggered when a route couldn't be reached because a guard returned a falsy value */
 	$on(event: 'forbidden', handler: (e: CustomEvent<{
 		message: string,
-		params: Params,
+		params?: Params,
 		location: string
 	}>) => any): () => void;
 }
