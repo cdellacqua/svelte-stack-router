@@ -1,7 +1,7 @@
 {
 	"name": "svelte-stack-router",
 	"version": "2.3.7",
-	"description": "Bridging the gap between Native Apps and WebApps. A Stack-based Svelte Router that will make your WebApp feel more native",
+	"description": "Bridging the gap between Native Apps and WebApps. A Svelte Router that caches page components and will make your WebApp feel more native",
 	"main": "dist/index.js",
 	"module": "dist/module.js",
 	"svelte": "src/index.js",
@@ -18,7 +18,8 @@
 		"spa",
 		"router",
 		"stack",
-		"svelte"
+		"svelte",
+		"cache"
 	],
 	"repository": {
 		"type": "git",
