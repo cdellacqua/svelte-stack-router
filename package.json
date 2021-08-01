@@ -1,6 +1,6 @@
 {
 	"name": "svelte-stack-router",
-	"version": "2.3.7",
+	"version": "2.3.8",
 	"description": "Bridging the gap between Native Apps and WebApps. A Svelte Router that caches page components and will make your WebApp feel more native",
 	"main": "dist/index.js",
 	"module": "dist/module.js",
