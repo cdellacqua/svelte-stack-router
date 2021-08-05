@@ -22,6 +22,6 @@
 		{/if}
 	</a>
 	{#if historyLength > 2}
-		<button on:click={() => pop("bye!")}>Go back passing a returnValue</button>
+		<button style="cursor: pointer;" on:click={() => pop("bye!")}>Go back passing a returnValue</button>
 	{/if}
 </div>
