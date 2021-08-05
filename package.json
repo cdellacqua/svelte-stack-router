@@ -40,8 +40,8 @@
 	],
 	"exports": {
 		".": {
-			"import": "./build/index.esm.js",
-			"require": "./build/index.cjs.js"
+			"import": "./dist/index.esm.js",
+			"require": "./dist/index.cjs.js"
 		},
 		"./package.json": "./package.json"
 	},
