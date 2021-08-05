@@ -2808,6 +2808,7 @@ var StackRouter = (function () {
     		c() {
     			button = element("button");
     			button.textContent = "Go back passing a returnValue";
+    			set_style(button, "cursor", "pointer");
     		},
     		m(target, anchor) {
     			insert(target, button, anchor);
