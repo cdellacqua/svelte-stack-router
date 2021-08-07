@@ -2,8 +2,8 @@
 	"name": "svelte-stack-router",
 	"version": "2.4.3",
 	"description": "Bridging the gap between Native Apps and WebApps. A Svelte Router that caches page components and will make your WebApp feel more native",
-	"main": "dist/index.cjs.js",
-	"module": "dist/index.esm.js",
+	"main": "dist/index.cjs",
+	"module": "dist/index.js",
 	"svelte": "src/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
@@ -40,8 +40,8 @@
 	],
 	"exports": {
 		".": {
-			"import": "./dist/index.esm.js",
-			"require": "./dist/index.cjs.js"
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs"
 		},
 		"./package.json": "./package.json"
 	},
