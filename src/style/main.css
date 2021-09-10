@@ -57,3 +57,8 @@ select {
 	font-size: 1em;
 }
 
+img.text {
+	height: 1em;
+	width: auto;
+	vertical-align: middle;
+}

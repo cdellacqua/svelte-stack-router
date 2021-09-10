@@ -2,9 +2,10 @@
 
 Bridging the gap between Native Apps and WebApps. A Svelte Router that caches page components and will make your WebApp feel more native
 
+
 [NPM Package](https://www.npmjs.com/package/svelte-stack-router)
 
-`npm install --save-dev svelte-stack-router`
+`npm install svelte-stack-router`
 
 ## Working demo
 
