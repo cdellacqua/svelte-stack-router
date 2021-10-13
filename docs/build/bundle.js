@@ -79,119 +79,11 @@ var StackRouter = (function () {
         };
     }
 
-    // Track which nodes are claimed during hydration. Unclaimed nodes can then be removed from the DOM
-    // at the end of hydration without touching the remaining nodes.
-    let is_hydrating = false;
-    function start_hydrating() {
-        is_hydrating = true;
-    }
-    function end_hydrating() {
-        is_hydrating = false;
-    }
-    function upper_bound(low, high, key, value) {
-        // Return first index of value larger than input value in the range [low, high)
-        while (low < high) {
-            const mid = low + ((high - low) >> 1);
-            if (key(mid) <= value) {
-                low = mid + 1;
-            }
-            else {
-                high = mid;
-            }
-        }
-        return low;
-    }
-    function init_hydrate(target) {
-        if (target.hydrate_init)
-            return;
-        target.hydrate_init = true;
-        // We know that all children have claim_order values since the unclaimed have been detached
-        const children = target.childNodes;
-        /*
-        * Reorder claimed children optimally.
-        * We can reorder claimed children optimally by finding the longest subsequence of
-        * nodes that are already claimed in order and only moving the rest. The longest
-        * subsequence subsequence of nodes that are claimed in order can be found by
-        * computing the longest increasing subsequence of .claim_order values.
-        *
-        * This algorithm is optimal in generating the least amount of reorder operations
-        * possible.
-        *
-        * Proof:
-        * We know that, given a set of reordering operations, the nodes that do not move
-        * always form an increasing subsequence, since they do not move among each other
-        * meaning that they must be already ordered among each other. Thus, the maximal
-        * set of nodes that do not move form a longest increasing subsequence.
-        */
-        // Compute longest increasing subsequence
-        // m: subsequence length j => index k of smallest value that ends an increasing subsequence of length j
-        const m = new Int32Array(children.length + 1);
-        // Predecessor indices + 1
-        const p = new Int32Array(children.length);
-        m[0] = -1;
-        let longest = 0;
-        for (let i = 0; i < children.length; i++) {
-            const current = children[i].claim_order;
-            // Find the largest subsequence length such that it ends in a value less than our current value
-            // upper_bound returns first greater value, so we subtract one
-            const seqLen = upper_bound(1, longest + 1, idx => children[m[idx]].claim_order, current) - 1;
-            p[i] = m[seqLen] + 1;
-            const newLen = seqLen + 1;
-            // We can guarantee that current is the smallest value. Otherwise, we would have generated a longer sequence.
-            m[newLen] = i;
-            longest = Math.max(newLen, longest);
-        }
-        // The longest increasing subsequence of nodes (initially reversed)
-        const lis = [];
-        // The rest of the nodes, nodes that will be moved
-        const toMove = [];
-        let last = children.length - 1;
-        for (let cur = m[longest] + 1; cur != 0; cur = p[cur - 1]) {
-            lis.push(children[cur - 1]);
-            for (; last >= cur; last--) {
-                toMove.push(children[last]);
-            }
-            last--;
-        }
-        for (; last >= 0; last--) {
-            toMove.push(children[last]);
-        }
-        lis.reverse();
-        // We sort the nodes being moved to guarantee that their insertion order matches the claim order
-        toMove.sort((a, b) => a.claim_order - b.claim_order);
-        // Finally, we move the nodes
-        for (let i = 0, j = 0; i < toMove.length; i++) {
-            while (j < lis.length && toMove[i].claim_order >= lis[j].claim_order) {
-                j++;
-            }
-            const anchor = j < lis.length ? lis[j] : null;
-            target.insertBefore(toMove[i], anchor);
-        }
-    }
     function append(target, node) {
-        if (is_hydrating) {
-            init_hydrate(target);
-            if ((target.actual_end_child === undefined) || ((target.actual_end_child !== null) && (target.actual_end_child.parentElement !== target))) {
-                target.actual_end_child = target.firstChild;
-            }
-            if (node !== target.actual_end_child) {
-                target.insertBefore(node, target.actual_end_child);
-            }
-            else {
-                target.actual_end_child = node.nextSibling;
-            }
-        }
-        else if (node.parentNode !== target) {
-            target.appendChild(node);
-        }
+        target.appendChild(node);
     }
     function insert(target, node, anchor) {
-        if (is_hydrating && !anchor) {
-            append(target, node);
-        }
-        else if (node.parentNode !== target || (anchor && node.nextSibling !== anchor)) {
-            target.insertBefore(node, anchor || null);
-        }
+        target.insertBefore(node, anchor || null);
     }
     function detach(node) {
         node.parentNode.removeChild(node);
@@ -704,7 +596,6 @@ var StackRouter = (function () {
         $$.fragment = create_fragment ? create_fragment($$.ctx) : false;
         if (options.target) {
             if (options.hydrate) {
-                start_hydrating();
                 const nodes = children(options.target);
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                 $$.fragment && $$.fragment.l(nodes);
@@ -717,7 +608,6 @@ var StackRouter = (function () {
             if (options.intro)
                 transition_in(component.$$.fragment);
             mount_component(component, options.target, options.anchor, options.customElement);
-            end_hydrating();
             flush();
         }
         set_current_component(parent_component);
@@ -943,19 +833,25 @@ var StackRouter = (function () {
                 await animationFrame();
                 await animationFrame();
             }
+            let preventAutoScroll = false;
+            const scrollListener = () => { preventAutoScroll = true; };
+            window.addEventListener('scroll', scrollListener);
             await sleep(duration);
-            window.scrollTo(scroll.x, scroll.y);
-            if (window.getComputedStyle(document.documentElement).scrollBehavior === 'smooth') {
-                // At the moment of writing this comment there is no official/simple way to wait for the
-                // window.scrollTo method to complete the animation
-                // Hack: loop for a maximum of 500ms checking if the scroll position is close enough to the target scroll
-                const threshold = 5;
-                for (let i = 0; i < 50; i++) {
-                    if (Math.sqrt(Math.pow(window.scrollX - scroll.x, 2)
-                        + Math.pow(window.scrollY - scroll.y, 2)) < threshold) {
-                        break;
+            window.removeEventListener('scroll', scrollListener);
+            if (!preventAutoScroll) {
+                window.scrollTo(scroll.x, scroll.y);
+                if (window.getComputedStyle(document.documentElement).scrollBehavior === 'smooth') {
+                    // At the moment of writing this comment there is no official/simple way to wait for the
+                    // window.scrollTo method to complete the animation
+                    // Hack: loop for a maximum of 500ms checking if the scroll position is close enough to the target scroll
+                    const threshold = 5;
+                    for (let i = 0; i < 50; i++) {
+                        if (Math.sqrt(Math.pow(window.scrollX - scroll.x, 2)
+                            + Math.pow(window.scrollY - scroll.y, 2)) < threshold) {
+                            break;
+                        }
+                        await sleep(10);
                     }
-                    await sleep(10);
                 }
             }
             for (const styleNode of styleNodes) {
@@ -1780,7 +1676,7 @@ var StackRouter = (function () {
         editableEntryConfig.resumable = resumable;
     }
 
-    /* src/StackRouter.svelte generated by Svelte v3.38.3 */
+    /* src/StackRouter.svelte generated by Svelte v3.38.2 */
 
     function create_fragment(ctx) {
     	let div;
@@ -1881,7 +1777,7 @@ var StackRouter = (function () {
     	}
     }
 
-    /* src/pages/Home.svelte generated by Svelte v3.38.3 */
+    /* src/pages/Home.svelte generated by Svelte v3.38.2 */
 
     function create_fragment$1(ctx) {
     	let div0;
@@ -1889,6 +1785,8 @@ var StackRouter = (function () {
     	let div1;
     	let t3;
     	let div2;
+    	let t5;
+    	let div3;
 
     	return {
     		c() {
@@ -1900,9 +1798,16 @@ var StackRouter = (function () {
     			t3 = space();
     			div2 = element("div");
     			div2.innerHTML = `<p>Less re-renders, full state preservation and cool animations!</p>`;
+    			t5 = space();
+    			div3 = element("div");
+
+    			div3.innerHTML = `<a href="https://github.com/cdellacqua/svelte-stack-router" rel="noopener"><img class="text" style="vertical-align: bottom;" src="/github.png" alt="GitHub logo"/></a> 
+	<a href="https://www.npmjs.com/package/svelte-stack-router" rel="noopener"><img class="text" src="/npm.png" alt="npm logo"/></a>`;
+
     			set_style(div0, "text-align", "center");
     			set_style(div1, "text-align", "center");
     			set_style(div2, "text-align", "center");
+    			set_style(div3, "text-align", "center");
     		},
     		m(target, anchor) {
     			insert(target, div0, anchor);
@@ -1910,6 +1815,8 @@ var StackRouter = (function () {
     			insert(target, div1, anchor);
     			insert(target, t3, anchor);
     			insert(target, div2, anchor);
+    			insert(target, t5, anchor);
+    			insert(target, div3, anchor);
     		},
     		p: noop,
     		i: noop,
@@ -1920,6 +1827,8 @@ var StackRouter = (function () {
     			if (detaching) detach(div1);
     			if (detaching) detach(t3);
     			if (detaching) detach(div2);
+    			if (detaching) detach(t5);
+    			if (detaching) detach(div3);
     		}
     	};
     }
@@ -1951,7 +1860,7 @@ var StackRouter = (function () {
         };
     }
 
-    /* src/pages/Resumable.svelte generated by Svelte v3.38.3 */
+    /* src/pages/Resumable.svelte generated by Svelte v3.38.2 */
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -2381,7 +2290,7 @@ var StackRouter = (function () {
     	}
     }
 
-    /* src/pages/Throwaway.svelte generated by Svelte v3.38.3 */
+    /* src/pages/Throwaway.svelte generated by Svelte v3.38.2 */
 
     function get_each_context$1(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -2563,7 +2472,7 @@ var StackRouter = (function () {
     	}
     }
 
-    /* src/pages/Redirect.svelte generated by Svelte v3.38.3 */
+    /* src/pages/Redirect.svelte generated by Svelte v3.38.2 */
 
     function create_fragment$4(ctx) {
     	let t;
@@ -2597,7 +2506,7 @@ var StackRouter = (function () {
     	}
     }
 
-    /* src/pages/NotFound.svelte generated by Svelte v3.38.3 */
+    /* src/pages/NotFound.svelte generated by Svelte v3.38.2 */
 
     function create_fragment$5(ctx) {
     	let div;
@@ -2647,7 +2556,7 @@ var StackRouter = (function () {
     	}
     }
 
-    /* src/pages/Guarded.svelte generated by Svelte v3.38.3 */
+    /* src/pages/Guarded.svelte generated by Svelte v3.38.2 */
 
     function create_fragment$6(ctx) {
     	let div0;
@@ -2688,7 +2597,7 @@ var StackRouter = (function () {
 
     var asyncComponentLoaded = writable(false);
 
-    /* src/pages/AsyncComponent.svelte generated by Svelte v3.38.3 */
+    /* src/pages/AsyncComponent.svelte generated by Svelte v3.38.2 */
 
     function create_fragment$7(ctx) {
     	let div0;
@@ -2763,7 +2672,7 @@ var StackRouter = (function () {
     	'*': NotFound,
     };
 
-    /* src/components/Links.svelte generated by Svelte v3.38.3 */
+    /* src/components/Links.svelte generated by Svelte v3.38.2 */
 
     function create_else_block(ctx) {
     	let t;
@@ -2993,7 +2902,7 @@ var StackRouter = (function () {
     	}
     }
 
-    /* src/pages/_Layout.svelte generated by Svelte v3.38.3 */
+    /* src/pages/_Layout.svelte generated by Svelte v3.38.2 */
 
     function get_each_context$2(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -3378,7 +3287,7 @@ var StackRouter = (function () {
     	}
     }
 
-    /* src/App.svelte generated by Svelte v3.38.3 */
+    /* src/App.svelte generated by Svelte v3.38.2 */
 
     function create_fragment$a(ctx) {
     	let layout;
