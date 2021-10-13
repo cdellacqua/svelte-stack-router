@@ -1801,8 +1801,8 @@ var StackRouter = (function () {
     			t5 = space();
     			div3 = element("div");
 
-    			div3.innerHTML = `<a href="https://github.com/cdellacqua/svelte-stack-router" rel="noopener"><img class="text" style="vertical-align: bottom;" src="/github.png" alt="GitHub logo"/></a> 
-	<a href="https://www.npmjs.com/package/svelte-stack-router" rel="noopener"><img class="text" src="/npm.png" alt="npm logo"/></a>`;
+    			div3.innerHTML = `<a href="https://github.com/cdellacqua/svelte-stack-router" rel="noopener"><img class="text" style="vertical-align: bottom;" src="github.png" alt="GitHub logo"/></a> 
+	<a href="https://www.npmjs.com/package/svelte-stack-router" rel="noopener"><img class="text" src="npm.png" alt="npm logo"/></a>`;
 
     			set_style(div0, "text-align", "center");
     			set_style(div1, "text-align", "center");
