@@ -38,24 +38,30 @@ export function commonTransitionGenerator(
 			await animationFrame();
 		}
 
+		let preventAutoScroll = false;
+		const scrollListener = () => { preventAutoScroll = true; };
+		window.addEventListener('scroll', scrollListener);
 		await sleep(duration);
+		window.removeEventListener('scroll', scrollListener);
 
-		window.scrollTo(scroll.x, scroll.y);
-		if (window.getComputedStyle(document.documentElement).scrollBehavior === 'smooth') {
-			// At the moment of writing this comment there is no official/simple way to wait for the
-			// window.scrollTo method to complete the animation
-			// Hack: loop for a maximum of 500ms checking if the scroll position is close enough to the target scroll
-			const threshold = 5;
-			for (let i = 0; i < 50; i++) {
-				if (
-					Math.sqrt(
-						Math.pow(window.scrollX - scroll.x, 2)
-						+ Math.pow(window.scrollY - scroll.y, 2),
-					) < threshold
-				) {
-					break;
+		if (!preventAutoScroll) {
+			window.scrollTo(scroll.x, scroll.y);
+			if (window.getComputedStyle(document.documentElement).scrollBehavior === 'smooth') {
+				// At the moment of writing this comment there is no official/simple way to wait for the
+				// window.scrollTo method to complete the animation
+				// Hack: loop for a maximum of 500ms checking if the scroll position is close enough to the target scroll
+				const threshold = 5;
+				for (let i = 0; i < 50; i++) {
+					if (
+						Math.sqrt(
+							Math.pow(window.scrollX - scroll.x, 2)
+							+ Math.pow(window.scrollY - scroll.y, 2),
+						) < threshold
+					) {
+						break;
+					}
+					await sleep(10);
 				}
-				await sleep(10);
 			}
 		}
 
