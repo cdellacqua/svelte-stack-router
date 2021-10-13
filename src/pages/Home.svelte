@@ -11,9 +11,9 @@
 </div>
 <div style="text-align: center">
 	<a href="https://github.com/cdellacqua/svelte-stack-router" rel="noopener">
-		<img class="text" style="vertical-align: bottom;" src="/github.png" alt="GitHub logo" />
+		<img class="text" style="vertical-align: bottom;" src="github.png" alt="GitHub logo" />
 	</a>
 	<a href="https://www.npmjs.com/package/svelte-stack-router" rel="noopener">
-		<img class="text" src="/npm.png" alt="npm logo" />
+		<img class="text" src="npm.png" alt="npm logo" />
 	</a>
 </div>
