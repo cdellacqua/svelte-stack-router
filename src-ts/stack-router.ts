@@ -636,7 +636,7 @@ export async function push(location: string): Promise<void> {
 			window.history.replaceState({
 				timestamp: window.history.state ? window.history.state.timestamp : new Date().getTime(),
 				scroll: {
-					x: window.scrollY,
+					x: window.scrollX,
 					y: window.scrollY,
 				},
 			}, '', (config.useHash ? '#' : '') + getLocation());
